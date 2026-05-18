@@ -19,38 +19,63 @@ function sessionPath(uuid) {
 /**
  * Spawn a pi RPC process, send a prompt, and collect the full text response.
  * Returns the accumulated assistant text.
+ *
+ * @param {string}   uuid   - Session UUID
+ * @param {string}   prompt - User prompt to send
+ * @param {object}  [opts]  - Optional overrides
+ * @param {boolean} [opts.extensions]    - Enable extensions/subagent tools (default false)
+ * @param {string}  [opts.provider]      - Override PI_PROVIDER
+ * @param {string}  [opts.model]         - Override PI_MODEL
+ * @param {string}  [opts.systemPrompt]  - Custom system prompt (--system-prompt)
+ * @param {string}  [opts.workDir]       - Override working directory
+ * @param {number}  [opts.timeoutMs]     - Override timeout
  */
-function runPiTurn(uuid, prompt) {
+function runPiTurn(uuid, prompt, opts = {}) {
   return new Promise((resolve, reject) => {
     const session = sessionPath(uuid);
+    const provider = opts.provider || PROVIDER;
+    const model = opts.model || MODEL;
+    const workDir = opts.workDir || WORK_DIR;
+    const timeoutMs = opts.timeoutMs || PI_TIMEOUT_MS;
+    const extensions = !!opts.extensions;
+
     const args = [
       "--mode", "rpc",
-      "--provider", PROVIDER,
-      "--model", MODEL,
+      "--provider", provider,
+      "--model", model,
       "--session", session,
-      "--no-extensions",
     ];
 
+    if (!extensions) {
+      args.push("--no-extensions");
+    }
+
+    if (opts.systemPrompt) {
+      args.push("--system-prompt", opts.systemPrompt);
+    }
+
     const sessionShort = uuid.slice(0, 8);
-    log.info({ session: sessionShort, file: session }, "starting pi turn");
+    log.info(
+      { session: sessionShort, file: session, provider, model, extensions },
+      "starting pi turn"
+    );
 
     const turnStart = Date.now();
-    log.debug({ workDir: WORK_DIR }, "pi working directory");
+    log.debug({ workDir }, "pi working directory");
     const pi = spawn("pi", args, {
-      cwd: WORK_DIR,
+      cwd: workDir,
       stdio: ["pipe", "pipe", "pipe"],
     });
 
     let responseText = "";
 
     const timeout = setTimeout(() => {
-      log.warn({ session: sessionShort, timeoutMs: PI_TIMEOUT_MS }, "timeout, killing pi");
+      log.warn({ session: sessionShort, timeoutMs }, "timeout, killing pi");
       pi.kill("SIGTERM");
-      // Give it a moment, then force kill
       setTimeout(() => {
         try { pi.kill("SIGKILL"); } catch {}
       }, 2000);
-    }, PI_TIMEOUT_MS);
+    }, timeoutMs);
 
     pi.stdout.on("data", (data) => {
       const lines = data.toString().split("\n");

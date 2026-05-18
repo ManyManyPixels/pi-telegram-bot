@@ -203,6 +203,15 @@ function handleGithubWebhook(req, res) {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end("{}");
 
+    // issue_comment: spawn an agent to respond on the issue
+    if (eventType === "issue_comment") {
+      const issueAgent = require("./commands/issue-agent");
+      issueAgent.handleIssueComment(payload).catch((err) =>
+        log.error({ eventType, deliveryId, err }, "issue agent handler failed")
+      );
+      return;
+    }
+
     // Format event
     const message = github.formatEvent(eventType, payload);
     if (!message) {

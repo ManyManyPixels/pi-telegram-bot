@@ -16,35 +16,81 @@ function init() {
   fs.mkdirSync(MAPPINGS_DIR, { recursive: true });
 }
 
-function mappingPath(chatId) {
+function sessionPathFor(uuid) {
+  return path.join(SESSIONS_DIR, `chat-${uuid}.jsonl`);
+}
+
+// ── Chat (Telegram) sessions ─────────────────────────────────────────
+
+function chatMappingPath(chatId) {
   return path.join(MAPPINGS_DIR, `chat-${chatId}.json`);
 }
 
 function getOrCreateSession(chatId) {
-  const mp = mappingPath(chatId);
+  const mp = chatMappingPath(chatId);
   if (fs.existsSync(mp)) {
     const { uuid } = JSON.parse(fs.readFileSync(mp, "utf8"));
-    return { uuid, sessionPath: sessionPathFor(uuid) };
+    return { uuid, sessionPath: sessionPathFor(uuid), isNew: false };
   }
   const uuid = crypto.randomUUID();
   fs.writeFileSync(
     mp,
     JSON.stringify({ uuid, createdAt: new Date().toISOString() })
   );
-  return { uuid, sessionPath: sessionPathFor(uuid) };
+  return { uuid, sessionPath: sessionPathFor(uuid), isNew: true };
 }
 
 function resetSession(chatId) {
   const uuid = crypto.randomUUID();
   fs.writeFileSync(
-    mappingPath(chatId),
+    chatMappingPath(chatId),
     JSON.stringify({ uuid, createdAt: new Date().toISOString() })
   );
   return { uuid, sessionPath: sessionPathFor(uuid) };
 }
 
-function sessionPathFor(uuid) {
-  return path.join(SESSIONS_DIR, `chat-${uuid}.jsonl`);
+// ── Issue sessions ───────────────────────────────────────────────────
+
+function issueMappingPath(issueNumber) {
+  return path.join(MAPPINGS_DIR, `issue-${issueNumber}.json`);
 }
 
-module.exports = { init, getOrCreateSession, resetSession, sessionPathFor };
+/**
+ * Get or create a persistent session for a GitHub issue.
+ * Returns { uuid, sessionPath, isNew } — isNew is true if the session
+ * was just created (first time this issue has been seen).
+ */
+function getOrCreateIssueSession(issueNumber) {
+  const mp = issueMappingPath(issueNumber);
+  if (fs.existsSync(mp)) {
+    const { uuid } = JSON.parse(fs.readFileSync(mp, "utf8"));
+    return { uuid, sessionPath: sessionPathFor(uuid), isNew: false };
+  }
+  const uuid = crypto.randomUUID();
+  fs.writeFileSync(
+    mp,
+    JSON.stringify({ uuid, issueNumber, createdAt: new Date().toISOString() })
+  );
+  return { uuid, sessionPath: sessionPathFor(uuid), isNew: true };
+}
+
+/**
+ * Reset the session for a GitHub issue (new UUID, fresh .jsonl).
+ */
+function resetIssueSession(issueNumber) {
+  const uuid = crypto.randomUUID();
+  fs.writeFileSync(
+    issueMappingPath(issueNumber),
+    JSON.stringify({ uuid, issueNumber, createdAt: new Date().toISOString() })
+  );
+  return { uuid, sessionPath: sessionPathFor(uuid) };
+}
+
+module.exports = {
+  init,
+  getOrCreateSession,
+  resetSession,
+  getOrCreateIssueSession,
+  resetIssueSession,
+  sessionPathFor,
+};
