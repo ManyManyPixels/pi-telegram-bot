@@ -9,6 +9,7 @@ const MODEL = process.env.PI_MODEL || "deepseek-v4-pro";
 const SESSIONS_DIR = path.resolve(
   process.env.PI_SESSION_DIR || path.join(__dirname, "sessions")
 );
+const WORK_DIR = process.env.PI_WORK_DIR || __dirname;
 const PI_TIMEOUT_MS = parseInt(process.env.PI_TIMEOUT_MS || "300000", 10); // 5 min
 
 function sessionPath(uuid) {
@@ -34,8 +35,9 @@ function runPiTurn(uuid, prompt) {
     log.info({ session: sessionShort, file: session }, "starting pi turn");
 
     const turnStart = Date.now();
+    log.debug({ workDir: WORK_DIR }, "pi working directory");
     const pi = spawn("pi", args, {
-      cwd: __dirname,
+      cwd: WORK_DIR,
       stdio: ["pipe", "pipe", "pipe"],
     });
 

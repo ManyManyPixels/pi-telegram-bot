@@ -12,9 +12,21 @@ set -a
 source "$SCRIPT_DIR/.env"
 set +a
 
+# ── Working directory ─────────────────────────────────────────────────
+# Priority: CLI arg > PI_WORK_DIR from .env > SCRIPT_DIR fallback
+PI_WORK_DIR="${1:-${PI_WORK_DIR:-$SCRIPT_DIR}}"
+PI_WORK_DIR=$(realpath "$PI_WORK_DIR" 2>/dev/null)
+if [ $? -ne 0 ] || [ ! -d "$PI_WORK_DIR" ]; then
+  echo "Error: working directory does not exist: $PI_WORK_DIR"
+  exit 1
+fi
+export PI_WORK_DIR
+
+
 echo "=== Telegram pi Bot ==="
 echo "Model:    ${PI_PROVIDER}/${PI_MODEL}"
 echo "Port:     ${WEBHOOK_PORT}"
+echo "WorkDir:  ${PI_WORK_DIR}"
 echo "Smee:     ${SMEE_URL}"
 echo ""
 
