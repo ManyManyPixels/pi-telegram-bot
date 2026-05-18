@@ -1,0 +1,26 @@
+{
+  "name": "pi-telegram-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot bridge for pi coding agent",
+  "type": "module",
+  "scripts": {
+    "dashboard": "tsx src/dashboard.tsx",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.33.4",
+  "dependencies": {
+    "@types/node": "^25.8.0",
+    "terminui": "^0.3.1",
+    "tsx": "^4.22.1",
+    "typescript": "^6.0.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}
