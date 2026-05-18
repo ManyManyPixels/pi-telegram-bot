@@ -1,4 +1,5 @@
 const sessions = require("./sessions");
+const { research, researchList } = require("./commands/research");
 
 /**
  * Command registry.
@@ -19,6 +20,9 @@ const registry = {
     const { uuid } = sessions.getOrCreateSession(chatId);
     return `Chat ID: \`${chatId}\`\nSession: \`${uuid.slice(0, 8)}\`\u2026`;
   },
+
+  research,
+  'research-list': researchList,
 };
 
 // ── Dispatcher ────────────────────────────────────────────────────────
@@ -28,7 +32,7 @@ const registry = {
  * null if the text doesn't start with / or the command isn't registered.
  */
 function dispatch(text, chatId, ctx) {
-  const match = text.trim().match(/^\/(\w+)\s*(.*)/s);
+  const match = text.trim().match(/^\/([\w-]+)\s*(.*)/s);
   if (!match) return null;
 
   const [, command, args] = match;

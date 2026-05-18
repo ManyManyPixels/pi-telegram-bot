@@ -7,6 +7,11 @@ pkill -f "node server.js" 2>/dev/null || true
 pkill -f "smee -u" 2>/dev/null || true
 sleep 0.5
 
+# Determine GitHub notify chat (optional)
+GITHUB_NOTIFY_CHAT_ID="${GITHUB_NOTIFY_CHAT_ID:-}"
+GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
+GITHUB_SMEE_URL="${GITHUB_SMEE_URL:-}"
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 set -a
 source "$SCRIPT_DIR/.env"
@@ -46,11 +51,19 @@ echo "Server PID: $SERVER_PID"
 
 sleep 1
 
-# ── Start smee proxy ──────────────────────────────────────────────────
+# ── Start smee proxy (Telegram) ───────────────────────────────────────
 echo "Starting smee (${SMEE_URL} -> http://localhost:${WEBHOOK_PORT}/webhook)..."
 smee -u "$SMEE_URL" -t "http://localhost:${WEBHOOK_PORT}/webhook" &
 SMEE_PID=$!
-echo "Smee PID: $SMEE_PID"
+echo "Smee PID (Telegram): $SMEE_PID"
+
+# ── Start smee proxy (GitHub, optional) ───────────────────────────────
+if [ -n "$GITHUB_SMEE_URL" ] && [ -n "$GITHUB_WEBHOOK_SECRET" ]; then
+  echo "Starting smee (${GITHUB_SMEE_URL} -> http://localhost:${WEBHOOK_PORT}/github-webhook)..."
+  smee -u "$GITHUB_SMEE_URL" -t "http://localhost:${WEBHOOK_PORT}/github-webhook" &
+  SMEE_GH_PID=$!
+  echo "Smee PID (GitHub):  $SMEE_GH_PID"
+fi
 
 echo ""
 echo "=== Ready ==="
@@ -58,4 +71,4 @@ echo "Send messages to your bot on Telegram!"
 echo "Commands: /reset /id"
 echo ""
 
-wait $SERVER_PID $SMEE_PID
+wait $SERVER_PID $SMEE_PID ${SMEE_GH_PID:-}
