@@ -1,5 +1,8 @@
 const { spawn } = require("child_process");
 const crypto = require("crypto");
+const { createLogger } = require("./utils/logger");
+
+const log = createLogger("telegram");
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
@@ -60,7 +63,7 @@ function createGist(text) {
     let stdout = "";
     gh.stdout.on("data", (d) => (stdout += d.toString()));
     gh.stderr.on("data", (d) =>
-      console.error(`[gh gist] ${d.toString().trim()}`)
+      log.debug({ stderr: d.toString().trim() }, "gh gist stderr")
     );
 
     gh.on("close", (code) => {
@@ -86,18 +89,20 @@ async function sendResponse(chatId, text) {
     return sendMessage(chatId, text);
   }
 
-  console.log(
-    `[telegram] Response too long (${text.length} chars), creating gist`
+  log.warn(
+    { chatId, responseLength: text.length },
+    "response too long, creating gist"
   );
 
   try {
     const gistUrl = await createGist(text);
+    log.info({ chatId, gistUrl, responseLength: text.length }, "gist created");
     return sendMessage(
       chatId,
       `Response too long for Telegram (${text.length} chars). Full response:\n${gistUrl}`
     );
   } catch (err) {
-    console.error(`[telegram] Gist failed: ${err.message}, falling back to truncation`);
+    log.error({ chatId, err }, "gist creation failed, falling back to truncation");
     // Fallback: send truncated
     return sendMessage(
       chatId,

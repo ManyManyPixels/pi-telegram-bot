@@ -2,8 +2,15 @@
 # Start the Telegram pi bot with smee webhook proxy
 set -e
 
+# ── Kill previously launched processes ────────────────────────────────
+pkill -f "node server.js" 2>/dev/null || true
+pkill -f "smee -u" 2>/dev/null || true
+sleep 0.5
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+set -a
 source "$SCRIPT_DIR/.env"
+set +a
 
 echo "=== Telegram pi Bot ==="
 echo "Model:    ${PI_PROVIDER}/${PI_MODEL}"

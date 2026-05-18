@@ -1,0 +1,12 @@
+{
+  "name": "pi-telegram-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Telegram bot for pi coding agent",
+  "main": "server.js",
+  "dependencies": {
+    "pino": "^8.21.0",
+    "pino-pretty": "^11.2.0",
+    "pino-roll": "^2.0.0"
+  }
+}

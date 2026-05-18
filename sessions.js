@@ -1,6 +1,9 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { createLogger } = require("./utils/logger");
+
+const log = createLogger("sessions");
 
 const SESSIONS_DIR = path.resolve(
   process.env.PI_SESSION_DIR || path.join(__dirname, "sessions")

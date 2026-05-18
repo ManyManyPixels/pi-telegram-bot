@@ -1,5 +1,8 @@
 const { spawn } = require("child_process");
 const path = require("path");
+const { createLogger } = require("./utils/logger");
+
+const log = createLogger("pi");
 
 const PROVIDER = process.env.PI_PROVIDER || "deepseek";
 const MODEL = process.env.PI_MODEL || "deepseek-v4-pro";
@@ -27,8 +30,10 @@ function runPiTurn(uuid, prompt) {
       "--no-extensions",
     ];
 
-    console.log(`[pi] Starting for session ${uuid.slice(0, 8)} (file: ${session})`);
+    const sessionShort = uuid.slice(0, 8);
+    log.info({ session: sessionShort, file: session }, "starting pi turn");
 
+    const turnStart = Date.now();
     const pi = spawn("pi", args, {
       cwd: __dirname,
       stdio: ["pipe", "pipe", "pipe"],
@@ -37,7 +42,7 @@ function runPiTurn(uuid, prompt) {
     let responseText = "";
 
     const timeout = setTimeout(() => {
-      console.error(`[pi] Timeout after ${PI_TIMEOUT_MS}ms, killing`);
+      log.warn({ session: sessionShort, timeoutMs: PI_TIMEOUT_MS }, "timeout, killing pi");
       pi.kill("SIGTERM");
       // Give it a moment, then force kill
       setTimeout(() => {
@@ -60,19 +65,21 @@ function runPiTurn(uuid, prompt) {
           }
 
           if (event.type === "tool_execution_start") {
-            console.log(`[pi] Tool call: ${event.toolName}`);
+            log.info({ session: sessionShort, tool: event.toolName }, "tool call");
           }
 
           if (event.type === "tool_execution_result") {
             const err = event.toolExecutionResult?.isError;
             if (err) {
-              console.log(`[pi] Tool error: ${event.toolName}`);
+              log.warn({ session: sessionShort, tool: event.toolName }, "tool error");
             }
           }
 
           if (event.type === "agent_end") {
-            console.log(
-              `[pi] Agent ended for session ${uuid.slice(0, 8)} (${responseText.length} chars)`
+            const elapsed = Date.now() - turnStart;
+            log.info(
+              { session: sessionShort, chars: responseText.length, elapsed },
+              "agent ended"
             );
             pi.stdin.end();
           }
@@ -83,18 +90,20 @@ function runPiTurn(uuid, prompt) {
     });
 
     pi.stderr.on("data", (d) => {
-      console.error(`[pi stderr] ${d.toString().trim()}`);
+      log.trace({ session: sessionShort, stderr: d.toString().trim() }, "pi stderr");
     });
 
     pi.on("close", (code) => {
       clearTimeout(timeout);
-      console.log(`[pi] Exited with code ${code}`);
+      const level = code === 0 ? "info" : "warn";
+      const elapsed = Date.now() - turnStart;
+      log[level]({ session: sessionShort, exitCode: code, elapsed }, "pi exited");
       resolve(responseText);
     });
 
     pi.on("error", (err) => {
       clearTimeout(timeout);
-      console.error(`[pi] Spawn error: ${err.message}`);
+      log.error({ session: sessionShort, err }, "pi spawn error");
       reject(err);
     });
 

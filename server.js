@@ -3,6 +3,9 @@ const telegram = require("./telegram");
 const sessions = require("./sessions");
 const pi = require("./pi");
 const commands = require("./commands");
+const { createLogger } = require("./utils/logger");
+
+const log = createLogger("server");
 
 const PORT = parseInt(process.env.WEBHOOK_PORT || "3001", 10);
 
@@ -51,7 +54,7 @@ async function processMessage(chatId, text) {
         await telegram.sendResponse(chatId, response);
       }
     } catch (err) {
-      console.error(`[cmd ${chatId}] Error: ${err.message}`);
+      log.error({ chatId, err }, "command error");
       await telegram.sendResponse(chatId, `\u26a0\ufe0f ${err.message}`);
     }
     return;
@@ -72,7 +75,7 @@ async function processMessage(chatId, text) {
       await telegram.sendResponse(chatId, "\u2014 (no response)");
     }
   } catch (err) {
-    console.error(`[pi ${chatId}] Error: ${err.message}`);
+    log.error({ chatId, err }, "pi turn error");
     await telegram.sendResponse(chatId, `\u26a0\ufe0f ${err.message}`);
   }
 }
@@ -88,9 +91,12 @@ const server = http.createServer((req, res) => {
 
   // Verify Telegram secret token
   const secret = req.headers["x-telegram-bot-api-secret-token"];
-  console.log("[webhook] Headers:", JSON.stringify(req.headers));
+  log.debug(
+    { contentType: req.headers["content-type"], secretProvided: !!secret },
+    "webhook request"
+  );
   if (!telegram.verifyWebhook(secret)) {
-    console.error("[webhook] Invalid or missing secret token. Got:", secret);
+    log.warn({ secretProvided: !!secret }, "invalid or missing webhook secret");
     res.writeHead(401);
     return res.end("unauthorized");
   }
@@ -119,15 +125,20 @@ const server = http.createServer((req, res) => {
     const text = msg.text;
     const sender = msg.from?.first_name || msg.from?.username || "?";
 
-    console.log(`[chat ${chatId}] ${sender}: ${text}`);
+    log.info({ chatId, sender, text }, "message received");
 
     withChatLock(chatId, () => processMessage(chatId, text));
   });
 });
 
 server.listen(PORT, () => {
-  console.log(`Telegram pi bot listening on port ${PORT}`);
-  console.log(`Model: ${process.env.PI_PROVIDER || "deepseek"}/${process.env.PI_MODEL || "deepseek-v4-pro"}`);
-  console.log(`Sessions: ${process.env.PI_SESSION_DIR || "./sessions"}`);
-  console.log(`Webhook path: /webhook`);
+  log.info({ port: PORT }, "server started");
+  log.info(
+    {
+      model: `${process.env.PI_PROVIDER || "deepseek"}/${process.env.PI_MODEL || "deepseek-v4-pro"}`,
+      sessions: process.env.PI_SESSION_DIR || "./sessions",
+      webhook: "/webhook",
+    },
+    "configuration"
+  );
 });
