@@ -5,10 +5,11 @@ const { createLogger } = require("./utils/logger");
 
 const log = createLogger("sessions");
 
+const LOGS_DIR = path.join(__dirname, "logs");
 const SESSIONS_DIR = path.resolve(
-  process.env.PI_SESSION_DIR || path.join(__dirname, "sessions")
+  process.env.PI_SESSION_DIR || path.join(LOGS_DIR, "sessions")
 );
-const MAPPINGS_DIR = path.join(__dirname, "mappings");
+const MAPPINGS_DIR = path.join(LOGS_DIR, "mappings");
 
 function init() {
   fs.mkdirSync(SESSIONS_DIR, { recursive: true });
