@@ -212,6 +212,25 @@ function handleGithubWebhook(req, res) {
       return;
     }
 
+    // issues labeled "needs-research": spawn research agent
+    if (eventType === "issues") {
+      const action = payload.action;
+      const labelName = payload.label?.name;
+      const issueLabels = payload.issue?.labels || [];
+
+      if (
+        (action === "labeled" && labelName === "needs-research") ||
+        (action === "opened" && issueLabels.some((l) => l.name === "needs-research"))
+      ) {
+        log.info({ eventType, deliveryId, action, issueNumber: payload.issue?.number }, "needs-research trigger");
+        const labelResearch = require("./commands/label-research");
+        labelResearch.handleLabelEvent(payload).catch((err) =>
+          log.error({ eventType, deliveryId, err }, "label research handler failed")
+        );
+      }
+      // Don't return — still send notification to Telegram below
+    }
+
     // Format event
     const message = github.formatEvent(eventType, payload);
     if (!message) {

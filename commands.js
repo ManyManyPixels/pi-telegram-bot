@@ -1,5 +1,4 @@
 const sessions = require("./sessions");
-const { research, researchList } = require("./commands/research");
 
 /**
  * Command registry.
@@ -20,9 +19,6 @@ const registry = {
     const { uuid } = sessions.getOrCreateSession(chatId);
     return `Chat ID: \`${chatId}\`\nSession: \`${uuid.slice(0, 8)}\`\u2026`;
   },
-
-  research,
-  'research-list': researchList,
 };
 
 // ── Dispatcher ────────────────────────────────────────────────────────

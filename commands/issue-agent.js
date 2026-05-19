@@ -60,9 +60,29 @@ async function fetchIssue(repo, issueNumber) {
   const stdout = await execFilePromise("gh", [
     "issue", "view", String(issueNumber),
     "--repo", repo,
-    "--json", "title,body",
+    "--json", "title,body,labels",
   ]);
   return JSON.parse(stdout);
+}
+
+/**
+ * Check whether an issue has the "has-agent" label.
+ * Returns true if the label is present, false otherwise.
+ */
+async function issueHasAgentLabel(repo, issueNumber) {
+  try {
+    const stdout = await execFilePromise("gh", [
+      "issue", "view", String(issueNumber),
+      "--repo", repo,
+      "--json", "labels",
+    ]);
+    const data = JSON.parse(stdout);
+    return (data.labels || []).some((l) => l.name === "has-agent");
+  } catch (err) {
+    log.warn({ issueNumber, err: err.message }, "failed to check has-agent label, allowing through");
+    // If we can't check, err on the side of processing (don't silently drop)
+    return true;
+  }
 }
 
 // ── Response splitting ───────────────────────────────────────────────
@@ -195,6 +215,13 @@ async function handleIssueComment(payload) {
   }
 
   const issueNumber = issue.number;
+
+  // Guard: only process comments on issues that have the "has-agent" label
+  const hasAgent = await issueHasAgentLabel(repo, issueNumber);
+  if (!hasAgent) {
+    log.info({ issueNumber }, "issue does not have has-agent label, skipping");
+    return;
+  }
   const commentId = comment.id;
   const commentBody = comment.body || "";
   const shortId = Math.random().toString(36).slice(2, 10);
