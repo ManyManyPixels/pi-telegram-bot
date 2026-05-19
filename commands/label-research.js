@@ -154,6 +154,15 @@ async function addComment(repo, issueNumber, body) {
   ]);
 }
 
+async function addIssueReaction(repo, issueNumber, content) {
+  return execFilePromise("gh", [
+    "api",
+    `repos/${repo}/issues/${issueNumber}/reactions`,
+    "-f", `content=${content}`,
+    "--silent",
+  ]);
+}
+
 // ── Research spawn ───────────────────────────────────────────────────
 
 async function spawnLabelResearch(repo, issueNumber, title, body, ownerRepoDir) {
@@ -177,6 +186,11 @@ async function spawnLabelResearch(repo, issueNumber, title, body, ownerRepoDir) 
   log.info(
     { issueKey, repo, issueNumber, researchDir, provider: PROVIDER, model: MODEL },
     "spawning research agent"
+  );
+
+  // Acknowledge with 👀 reaction
+  addIssueReaction(repo, issueNumber, "eyes").catch((err) =>
+    log.warn({ issueKey, err: err.message }, "failed to post eyes reaction")
   );
 
   const startTime = Date.now();
@@ -299,6 +313,9 @@ async function spawnLabelResearch(repo, issueNumber, title, body, ownerRepoDir) 
         await removeLabel(repo, issueNumber, "needs-research");
         await addLabels(repo, issueNumber, "research,has-agent");
         log.info({ issueKey }, "labels updated: removed needs-research, added research + has-agent");
+
+        // Add 🚀 reaction on success
+        addIssueReaction(repo, issueNumber, "rocket").catch(() => {});
       } catch (err) {
         log.error({ issueKey, err: err.message }, "failed to update issue");
         await handleFailure(repo, issueNumber, `update_failed: ${err.message}`);
@@ -320,6 +337,9 @@ async function spawnLabelResearch(repo, issueNumber, title, body, ownerRepoDir) 
 }
 
 async function handleFailure(repo, issueNumber, reason) {
+  // Add ❌ reaction on failure
+  addIssueReaction(repo, issueNumber, "confused").catch(() => {});
+
   try {
     await addComment(
       repo,

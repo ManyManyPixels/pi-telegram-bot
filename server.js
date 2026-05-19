@@ -212,6 +212,15 @@ function handleGithubWebhook(req, res) {
       return;
     }
 
+    // pull_request_review: spawn an agent to implement review feedback
+    if (eventType === "pull_request_review") {
+      const prReviewAgent = require("./commands/pr-review-agent");
+      prReviewAgent.handleReviewSubmitted(payload).catch((err) =>
+        log.error({ eventType, deliveryId, err }, "pr review agent handler failed")
+      );
+      return;
+    }
+
     // issues labeled "needs-research": spawn research agent
     if (eventType === "issues") {
       const action = payload.action;

@@ -86,11 +86,50 @@ function resetIssueSession(issueNumber) {
   return { uuid, sessionPath: sessionPathFor(uuid) };
 }
 
+// ── PR sessions ──────────────────────────────────────────────────────
+
+function prMappingPath(prNumber) {
+  return path.join(MAPPINGS_DIR, `pr-${prNumber}.json`);
+}
+
+/**
+ * Get or create a persistent session for a GitHub pull request.
+ * Returns { uuid, sessionPath, isNew } — isNew is true if the session
+ * was just created (first time this PR has been seen).
+ */
+function getOrCreatePrSession(prNumber) {
+  const mp = prMappingPath(prNumber);
+  if (fs.existsSync(mp)) {
+    const { uuid } = JSON.parse(fs.readFileSync(mp, "utf8"));
+    return { uuid, sessionPath: sessionPathFor(uuid), isNew: false };
+  }
+  const uuid = crypto.randomUUID();
+  fs.writeFileSync(
+    mp,
+    JSON.stringify({ uuid, prNumber, createdAt: new Date().toISOString() })
+  );
+  return { uuid, sessionPath: sessionPathFor(uuid), isNew: true };
+}
+
+/**
+ * Reset the session for a GitHub PR (new UUID, fresh .jsonl).
+ */
+function resetPrSession(prNumber) {
+  const uuid = crypto.randomUUID();
+  fs.writeFileSync(
+    prMappingPath(prNumber),
+    JSON.stringify({ uuid, prNumber, createdAt: new Date().toISOString() })
+  );
+  return { uuid, sessionPath: sessionPathFor(uuid) };
+}
+
 module.exports = {
   init,
   getOrCreateSession,
   resetSession,
   getOrCreateIssueSession,
   resetIssueSession,
+  getOrCreatePrSession,
+  resetPrSession,
   sessionPathFor,
 };
