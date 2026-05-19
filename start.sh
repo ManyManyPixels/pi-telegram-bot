@@ -2,18 +2,26 @@
 # Start the GitHub pi bot with smee webhook proxy
 set -e
 
-# ── Kill previously launched processes ────────────────────────────────
-pkill -f "node server.js" 2>/dev/null || true
-pkill -f "smee -u" 2>/dev/null || true
-sleep 0.5
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# ── Load env vars first (needed for port) ─────────────────────────────
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
 GITHUB_SMEE_URL="${GITHUB_SMEE_URL:-}"
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  set -a
+  source "$SCRIPT_DIR/.env"
+  set +a
+fi
+WEBHOOK_PORT="${WEBHOOK_PORT:-3000}"
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-set -a
-source "$SCRIPT_DIR/.env"
-set +a
+# ── Kill previously launched processes ────────────────────────────────
+# Kill anything on our port first (most reliable)
+fuser -k "${WEBHOOK_PORT}/tcp" 2>/dev/null || true
+# Broader fallback: kill any node server or smee in this project
+pkill -f "require('./server')" 2>/dev/null || true
+pkill -f "node server"           2>/dev/null || true
+pkill -f "smee -u"              2>/dev/null || true
+sleep 0.5
 
 # ── Working directory ─────────────────────────────────────────────────
 # Priority: CLI arg > PI_WORK_DIR from .env > SCRIPT_DIR fallback

@@ -55,8 +55,17 @@ function handleGithubWebhook(req, res) {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end("{}");
 
-    // issue_comment: spawn an agent to respond on the issue
+    // issue_comment: route to PR agent if it's a PR, otherwise issue agent
     if (eventType === "issue_comment") {
+      // PR comment — trigger the implementation agent
+      if (payload.issue?.pull_request) {
+        const prReviewAgent = require("./commands/pr-review-agent");
+        prReviewAgent.handlePrComment(payload).catch((err) =>
+          log.error({ eventType, deliveryId, err }, "pr comment handler failed")
+        );
+        return;
+      }
+      // Regular issue comment — pair-programmer agent
       const issueAgent = require("./commands/issue-agent");
       issueAgent.handleIssueComment(payload).catch((err) =>
         log.error({ eventType, deliveryId, err }, "issue agent handler failed")
