@@ -1,8 +1,8 @@
 {
-  "name": "pi-telegram-bot",
+  "name": "pi-github-bot",
   "version": "1.0.0",
   "private": true,
-  "description": "Telegram bot for pi coding agent",
+  "description": "GitHub bot for pi coding agent",
   "main": "server.js",
   "dependencies": {
     "pino": "^8.21.0",

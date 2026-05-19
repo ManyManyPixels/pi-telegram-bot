@@ -2,7 +2,7 @@ const { promises: fs } = require("fs");
 const path = require("path");
 const { execFile } = require("child_process");
 const { createLogger } = require("../utils/logger");
-const { getOrCreatePrSession } = require("../sessions");
+const { prSessionPath } = require("../sessions");
 const { runPiTurn } = require("../pi");
 
 const log = createLogger("pr-review-agent");
@@ -194,8 +194,8 @@ async function handleReviewSubmitted(payload) {
 
   // Fire-and-forget the agent work
   (async () => {
-    // Get or create the persistent session for this PR
-    const { uuid, isNew } = getOrCreatePrSession(prNumber);
+    // Persistent session for this PR
+    const sessionPath = prSessionPath(prNumber);
 
     // Build a minimal prompt — just the PR link.
     // The agent self-serves everything: fetches PR details, finds the
@@ -211,7 +211,7 @@ async function handleReviewSubmitted(payload) {
     const systemPrompt = await loadSystemPrompt();
 
     log.info(
-      { shortId, prNumber, isNew, promptLen: prompt.length },
+      { shortId, prNumber, promptLen: prompt.length },
       "spawning PR review agent"
     );
 
@@ -222,7 +222,7 @@ async function handleReviewSubmitted(payload) {
 
     let responseText;
     try {
-      responseText = await runPiTurn(uuid, prompt, {
+      responseText = await runPiTurn(sessionPath, prompt, {
         extensions: true,
         provider: PROVIDER,
         model: MODEL,

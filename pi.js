@@ -12,17 +12,13 @@ const SESSIONS_DIR = path.resolve(
 const WORK_DIR = process.env.PI_WORK_DIR || __dirname;
 const PI_TIMEOUT_MS = parseInt(process.env.PI_TIMEOUT_MS || "300000", 10); // 5 min
 
-function sessionPath(uuid) {
-  return path.join(SESSIONS_DIR, `chat-${uuid}.jsonl`);
-}
-
 /**
  * Spawn a pi RPC process, send a prompt, and collect the full text response.
  * Returns the accumulated assistant text.
  *
- * @param {string}   uuid   - Session UUID
- * @param {string}   prompt - User prompt to send
- * @param {object}  [opts]  - Optional overrides
+ * @param {string}   sessionPath - Full path to the session .jsonl file
+ * @param {string}   prompt     - User prompt to send
+ * @param {object}  [opts]      - Optional overrides
  * @param {boolean} [opts.extensions]    - Enable extensions/subagent tools (default false)
  * @param {string}  [opts.provider]      - Override PI_PROVIDER
  * @param {string}  [opts.model]         - Override PI_MODEL
@@ -30,9 +26,8 @@ function sessionPath(uuid) {
  * @param {string}  [opts.workDir]       - Override working directory
  * @param {number}  [opts.timeoutMs]     - Override timeout
  */
-function runPiTurn(uuid, prompt, opts = {}) {
+function runPiTurn(sessionPath, prompt, opts = {}) {
   return new Promise((resolve, reject) => {
-    const session = sessionPath(uuid);
     const provider = opts.provider || PROVIDER;
     const model = opts.model || MODEL;
     const workDir = opts.workDir || WORK_DIR;
@@ -43,7 +38,7 @@ function runPiTurn(uuid, prompt, opts = {}) {
       "--mode", "rpc",
       "--provider", provider,
       "--model", model,
-      "--session", session,
+      "--session", sessionPath,
     ];
 
     if (!extensions) {
@@ -54,9 +49,10 @@ function runPiTurn(uuid, prompt, opts = {}) {
       args.push("--system-prompt", opts.systemPrompt);
     }
 
-    const sessionShort = uuid.slice(0, 8);
+    const sessionLabel = path.basename(sessionPath, ".jsonl");
+    const sessionShort = sessionLabel.slice(0, 20);
     log.info(
-      { session: sessionShort, file: session, provider, model, extensions },
+      { session: sessionShort, file: sessionPath, provider, model, extensions },
       "starting pi turn"
     );
 

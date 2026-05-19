@@ -2,7 +2,7 @@ const { promises: fs } = require("fs");
 const path = require("path");
 const { execFile } = require("child_process");
 const { createLogger } = require("../utils/logger");
-const { getOrCreateIssueSession } = require("../sessions");
+const { issueSessionPath } = require("../sessions");
 const { runPiTurn } = require("../pi");
 
 const log = createLogger("issue-agent");
@@ -54,15 +54,6 @@ async function postComment(repo, issueNumber, body) {
     "--repo", repo,
     "--body", body,
   ]);
-}
-
-async function fetchIssue(repo, issueNumber) {
-  const stdout = await execFilePromise("gh", [
-    "issue", "view", String(issueNumber),
-    "--repo", repo,
-    "--json", "title,body,labels",
-  ]);
-  return JSON.parse(stdout);
 }
 
 /**
@@ -151,28 +142,6 @@ async function loadSystemPrompt() {
   }
 }
 
-// ── Prompt building ──────────────────────────────────────────────────
-
-/**
- * Build the user prompt for the agent turn.
- * On the first turn (isNew), seed with issue title and body so the agent
- * has context before the session history is established.
- */
-function buildPrompt(commentBody, issueData, isNew) {
-  if (!isNew) return commentBody;
-
-  const title = issueData.title || "Untitled";
-  const body = issueData.body || "";
-
-  let msg = `[ISSUE CONTEXT]\nTitle: ${title}\n`;
-  if (body) {
-    msg += `Body: ${body}\n`;
-  }
-  msg += `[/ISSUE CONTEXT]\n\n${commentBody}`;
-
-  return msg;
-}
-
 // ── Main handler ─────────────────────────────────────────────────────
 
 /**
@@ -241,31 +210,20 @@ async function handleIssueComment(payload) {
 
   // Fire-and-forget the agent work
   (async () => {
-    // Get or create the persistent session for this issue
-    const { uuid, isNew } = getOrCreateIssueSession(issueNumber);
+    // Persistent session for this issue
+    const sessionPath = issueSessionPath(issueNumber);
 
-    // Fetch issue data (only needed for first-turn seeding)
-    let issueData = { title: "", body: "" };
-    if (isNew) {
-      try {
-        issueData = await fetchIssue(repo, issueNumber);
-      } catch (err) {
-        log.warn({ shortId, err: err.message }, "failed to fetch issue data for seeding");
-        // Continue without seeding — agent can self-serve via gh CLI
-      }
-    }
-
-    const prompt = buildPrompt(commentBody, issueData, isNew);
+    const prompt = commentBody;
     const systemPrompt = await loadSystemPrompt();
 
     log.info(
-      { shortId, issueNumber, isNew, promptLen: prompt.length },
+      { shortId, issueNumber, promptLen: prompt.length },
       "spawning issue agent"
     );
 
     let responseText;
     try {
-      responseText = await runPiTurn(uuid, prompt, {
+      responseText = await runPiTurn(sessionPath, prompt, {
         extensions: true,
         provider: PROVIDER,
         model: MODEL,
