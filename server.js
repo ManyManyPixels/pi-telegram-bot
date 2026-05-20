@@ -1,14 +1,16 @@
 const http = require("http");
 const github = require("./github");
 const sessions = require("./sessions");
+const registry = require("./lib/registry");
 const { createLogger } = require("./utils/logger");
 
 const log = createLogger("server");
 
 const PORT = parseInt(process.env.WEBHOOK_PORT || "3001", 10);
 
-// Ensure directories
+// Ensure directories and auto-register commands
 sessions.init();
+registry.autoRegister();
 
 // ── GitHub webhook handler ────────────────────────────────────────────
 
@@ -37,7 +39,7 @@ function handleGithubWebhook(req, res) {
         const params = new URLSearchParams(body);
         const encoded = params.get("payload");
         if (!encoded) {
-          log.error({ eventType, deliveryId, bodyPreview: body.slice(0, 100) }, "form-encoded body missing 'payload' param");
+          log.error({ eventType, deliveryId }, "form-encoded body missing 'payload' param");
           res.writeHead(400);
           return res.end("bad request: missing payload");
         }
@@ -46,7 +48,7 @@ function handleGithubWebhook(req, res) {
         payload = JSON.parse(body);
       }
     } catch (err) {
-      log.error({ eventType, deliveryId, contentType, err, bodyPreview: body.slice(0, 120) }, "failed to parse webhook body");
+      log.error({ eventType, deliveryId, err }, "failed to parse webhook body");
       res.writeHead(400);
       return res.end("bad request");
     }
@@ -55,50 +57,8 @@ function handleGithubWebhook(req, res) {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end("{}");
 
-    // issue_comment: route to PR agent if it's a PR, otherwise issue agent
-    if (eventType === "issue_comment") {
-      // PR comment — trigger the implementation agent
-      if (payload.issue?.pull_request) {
-        const prReviewAgent = require("./commands/pr-review-agent");
-        prReviewAgent.handlePrComment(payload).catch((err) =>
-          log.error({ eventType, deliveryId, err }, "pr comment handler failed")
-        );
-        return;
-      }
-      // Regular issue comment — pair-programmer agent
-      const issueAgent = require("./commands/issue-agent");
-      issueAgent.handleIssueComment(payload).catch((err) =>
-        log.error({ eventType, deliveryId, err }, "issue agent handler failed")
-      );
-      return;
-    }
-
-    // pull_request_review: spawn an agent to implement review feedback
-    if (eventType === "pull_request_review") {
-      const prReviewAgent = require("./commands/pr-review-agent");
-      prReviewAgent.handleReviewSubmitted(payload).catch((err) =>
-        log.error({ eventType, deliveryId, err }, "pr review agent handler failed")
-      );
-      return;
-    }
-
-    // issues labeled "needs-research": spawn research agent
-    if (eventType === "issues") {
-      const action = payload.action;
-      const labelName = payload.label?.name;
-      const issueLabels = payload.issue?.labels || [];
-
-      if (
-        (action === "labeled" && labelName === "needs-research") ||
-        (action === "opened" && issueLabels.some((l) => l.name === "needs-research"))
-      ) {
-        log.info({ eventType, deliveryId, action, issueNumber: payload.issue?.number }, "needs-research trigger");
-        const labelResearch = require("./commands/label-research");
-        labelResearch.handleLabelEvent(payload).catch((err) =>
-          log.error({ eventType, deliveryId, err }, "label research handler failed")
-        );
-      }
-    }
+    // Dispatch to all matching commands
+    registry.dispatch(payload, eventType);
   });
 }
 
