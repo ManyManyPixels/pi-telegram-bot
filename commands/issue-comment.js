@@ -15,7 +15,7 @@ function matches(payload, eventType) {
   const repo = payload.repository?.full_name;
   if (repo !== TARGET_REPO) return false;
 
-  // Skip PR comments (handled by pr-review-agent)
+  // Skip PR comments
   if (payload.issue?.pull_request) return false;
 
   // Skip bot's own comments
