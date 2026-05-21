@@ -6,7 +6,7 @@ const { issueSessionPath } = require("../sessions");
 const TARGET_REPO = (process.env.GITHUB_ISSUE_REPO || "alexfi/flow").trim();
 const BOT_USERNAME = (process.env.GITHUB_BOT_USERNAME || "").trim();
 
-register("issue-agent", matches, handler);
+register("issue-comment", matches, handler);
 
 function matches(payload, eventType) {
   if (eventType !== "issue_comment") return false;
