@@ -31,7 +31,7 @@ function runPiTurn(sessionPath, prompt, opts = {}) {
     const provider = opts.provider || PROVIDER;
     const model = opts.model || MODEL;
     const workDir = opts.workDir || WORK_DIR;
-    const timeoutMs = opts.timeoutMs || PI_TIMEOUT_MS;
+    const timeoutMs = opts.timeoutMs !== undefined ? opts.timeoutMs : PI_TIMEOUT_MS;
     const extensions = !!opts.extensions;
 
     const args = [
@@ -65,13 +65,16 @@ function runPiTurn(sessionPath, prompt, opts = {}) {
 
     let responseText = "";
 
-    const timeout = setTimeout(() => {
-      log.warn({ session: sessionShort, timeoutMs }, "timeout, killing pi");
-      pi.kill("SIGTERM");
-      setTimeout(() => {
-        try { pi.kill("SIGKILL"); } catch {}
-      }, 2000);
-    }, timeoutMs);
+    let timeout;
+    if (timeoutMs > 0) {
+      timeout = setTimeout(() => {
+        log.warn({ session: sessionShort, timeoutMs }, "timeout, killing pi");
+        pi.kill("SIGTERM");
+        setTimeout(() => {
+          try { pi.kill("SIGKILL"); } catch {}
+        }, 2000);
+      }, timeoutMs);
+    }
 
     pi.stdout.on("data", (data) => {
       const lines = data.toString().split("\n");
@@ -117,7 +120,7 @@ function runPiTurn(sessionPath, prompt, opts = {}) {
     });
 
     pi.on("close", (code) => {
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
       const level = code === 0 ? "info" : "warn";
       const elapsed = Date.now() - turnStart;
       log[level]({ session: sessionShort, exitCode: code, elapsed }, "pi exited");
@@ -125,7 +128,7 @@ function runPiTurn(sessionPath, prompt, opts = {}) {
     });
 
     pi.on("error", (err) => {
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
       log.error({ session: sessionShort, err }, "pi spawn error");
       reject(err);
     });
