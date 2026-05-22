@@ -1,10 +1,14 @@
 const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
 const gh = require("../utils/gh");
 const { register } = require("../lib/registry");
 const { issueSessionPath } = require("../sessions");
 const { matchesCommand } = require("../lib/command-utils");
 const { createLogger } = require("../utils/logger");
+const { execFilePromise } = require("../utils/exec");
 
+const WORK_DIR = process.env.PI_WORK_DIR || __dirname;
 const log = createLogger("status");
 
 register("status", matches, handler);
@@ -19,17 +23,11 @@ async function handler(payload) {
   const sessionPath = issueSessionPath(issueNumber);
 
   try {
+    ensureSession(sessionPath);
     const summary = summarizeSession(sessionPath);
-    if (!summary) {
-      await gh.postComment(
-        repo,
-        issueNumber,
-        "📊 **Session Status**\n\nNo session data found for this issue.",
-      );
-      return;
-    }
+    const gitInfo = await getGitInfo();
 
-    const body = formatStatus(summary);
+    const body = formatStatus(summary, gitInfo);
     await gh.postComment(repo, issueNumber, body);
     log.info({ repo, issueNumber }, "status posted");
   } catch (err) {
@@ -112,8 +110,6 @@ function summarizeSession(sessionPath) {
     }
   }
 
-  if (assistantTurns === 0 && userTurns === 0) return null;
-
   return {
     sessionId,
     provider,
@@ -134,9 +130,63 @@ function summarizeSession(sessionPath) {
 }
 
 /**
+ * Gather current git branch and working tree status.
+ *
+ * @returns {Promise<{branch: string|null, status: string|null, error: string|null}>}
+ */
+async function getGitInfo() {
+  try {
+    const branch = (await execFilePromise("git", ["branch", "--show-current"], { cwd: WORK_DIR }))
+      .trim() || "(detached)";
+    const status = (await execFilePromise("git", ["status", "--short"], { cwd: WORK_DIR }))
+      .trim() || "(clean)";
+    return { branch, status, error: null };
+  } catch (err) {
+    return { branch: null, status: null, error: err.message };
+  }
+}
+
+/**
+ * Create a minimal session file if one doesn't already exist.
+ * Writes the session header and current model info so status
+ * always has something to render.
+ */
+function ensureSession(sessionPath) {
+  if (fs.existsSync(sessionPath)) return;
+
+  const providerEnv = "PI_ISSUE";
+  const provider = process.env[`${providerEnv}_PROVIDER`] || process.env.PI_PROVIDER || "deepseek";
+  const model = process.env[`${providerEnv}_MODEL`] || process.env.PI_MODEL || "deepseek-v4-pro";
+
+  const sessionEvent = {
+    type: "session",
+    version: 3,
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    cwd: WORK_DIR,
+  };
+  const modelChangeEvent = {
+    type: "model_change",
+    id: "00000000",
+    parentId: null,
+    timestamp: new Date().toISOString(),
+    provider,
+    modelId: model,
+  };
+
+  const dir = path.dirname(sessionPath);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    sessionPath,
+    JSON.stringify(sessionEvent) + "\n" + JSON.stringify(modelChangeEvent) + "\n",
+    "utf-8",
+  );
+}
+
+/**
  * Format a summary object into a Markdown status message.
  */
-function formatStatus(s) {
+function formatStatus(s, gitInfo) {
   const parts = [
     "📊 **Session Status**",
     "",
@@ -146,6 +196,15 @@ function formatStatus(s) {
     `| **Assistant turns** | ${s.assistantTurns} |`,
     `| **User prompts** | ${s.userTurns} |`,
   ];
+
+  // Git info
+  if (gitInfo) {
+    parts.push(`| **Active branch** | \`${gitInfo.branch || "unknown"}\` |`);
+    const statusLines = gitInfo.status
+      ? gitInfo.status.split("\n").map((l) => `\`${l}\``).join("<br>")
+      : `_${gitInfo.error || "unavailable"}_`;
+    parts.push(`| **Git status** | ${statusLines} |`);
+  }
 
   // Tokens
   parts.push(
