@@ -110,7 +110,7 @@ async function replyToReviewComment(repo, prNumber, commentId, body) {
     "api",
     `repos/${repo}/pulls/${prNumber}/comments`,
     "-f", `body=${body}`,
-    "-f", `in_reply_to_id=${commentId}`,
+    "-f", `in_reply_to=${commentId}`,
     "--silent",
   ]);
 }
