@@ -23,6 +23,8 @@ async function handler(payload) {
 ${prompt}
 Use gh CLI to get issue with number ${issueNumber} in repo ${repo}. Get title, body and comments for the whole context.
 
+CRITICAL: You are running in a single-turn environment. Do NOT stop to confirm understanding or ask "Shall I proceed?" — implement everything fully including creating the draft PR, all in one pass. Skip the confirmation step entirely.
+
 BEFORE YOU START IMPLEMENTING: comment to the issue letting the user know that you will start implementing now.
 AFTER THE RESEARCH IS DONE: close current issue and create a new one with the detailed plan. 
 `;
@@ -31,6 +33,7 @@ AFTER THE RESEARCH IS DONE: close current issue and create a new one with the de
     sessionPath,
     prompt: fullPrompt,
     gh,
+    postTo: { type: "issue", repo, number: issueNumber },
     reactTo: { type: "comment", repo, id: commentId },
     providerEnv: "PI_ISSUE",
     timeoutMs: 0, // no timeout — implementation can take a while

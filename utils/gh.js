@@ -105,6 +105,16 @@ async function fetchReviewComments(repo, prNumber) {
   return comments;
 }
 
+async function replyToReviewComment(repo, prNumber, commentId, body) {
+  return execFilePromise("gh", [
+    "api",
+    `repos/${repo}/pulls/${prNumber}/comments`,
+    "-f", `body=${body}`,
+    "-f", `in_reply_to_id=${commentId}`,
+    "--silent",
+  ]);
+}
+
 module.exports = {
   addIssueReaction,
   addCommentReaction,
@@ -117,4 +127,5 @@ module.exports = {
   addPrReaction,
   addReviewCommentReaction,
   fetchReviewComments,
+  replyToReviewComment,
 };

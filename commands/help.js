@@ -10,6 +10,7 @@ const HELP_TEXT = `**Available commands:**
 - \`>research <prompt>\` — Research a topic in the codebase
 - \`>implement <prompt>\` — Implement changes
 - \`>plan <prompt>\` — Create an implementation plan
+- \`>quick-fix <prompt>\` — Fast PR fix (works on PR comments & review comments)
 - \`>status\` — Show current session status (tokens, cost, model)
 - \`>reset\` — Reset the session completely (same as /new)
 - \`>help\` — Show this help message`;

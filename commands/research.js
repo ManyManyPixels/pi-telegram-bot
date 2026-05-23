@@ -31,6 +31,7 @@ AFTER THE RESEARCH IS DONE: close current issue and create a new one with the re
     sessionPath,
     prompt: fullPrompt,
     gh,
+    postTo: { type: "issue", repo, number: issueNumber },
     reactTo: { type: "comment", repo, id: commentId },
     providerEnv: "PI_ISSUE",
     timeoutMs: 0, // no timeout — research can take a while
