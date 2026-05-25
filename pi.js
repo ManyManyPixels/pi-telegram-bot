@@ -6,58 +6,35 @@ const log = createLogger("pi");
 
 const PROVIDER = process.env.PI_PROVIDER || "deepseek";
 const MODEL = process.env.PI_MODEL || "deepseek-v4-pro";
-const SESSIONS_DIR = path.resolve(
-  process.env.PI_SESSION_DIR || path.join(__dirname, "sessions")
-);
 const WORK_DIR = process.env.PI_WORK_DIR || __dirname;
 const PI_TIMEOUT_MS = parseInt(process.env.PI_TIMEOUT_MS || "300000", 10); // 5 min
 
 /**
  * Spawn a pi RPC process, send a prompt, and collect the full text response.
- * Returns the accumulated assistant text.
  *
- * @param {string}   sessionPath - Full path to the session .jsonl file
- * @param {string}   prompt     - User prompt to send
- * @param {object}  [opts]      - Optional overrides
- * @param {boolean} [opts.extensions]    - Enable extensions/subagent tools (default false)
- * @param {string}  [opts.provider]      - Override PI_PROVIDER
- * @param {string}  [opts.model]         - Override PI_MODEL
- * @param {string}  [opts.systemPrompt]  - Custom system prompt (--system-prompt)
- * @param {string}  [opts.workDir]       - Override working directory
- * @param {number}  [opts.timeoutMs]     - Override timeout
+ * @param {string} sessionPath - Full path to the session .jsonl file
+ * @param {string} prompt      - User prompt to send
+ * @param {object} [opts]      - Optional overrides
+ * @param {string} [opts.workDir]    - Override working directory
+ * @param {number} [opts.timeoutMs]  - Override timeout
  */
 function runPiTurn(sessionPath, prompt, opts = {}) {
   return new Promise((resolve, reject) => {
-    const provider = opts.provider || PROVIDER;
-    const model = opts.model || MODEL;
     const workDir = opts.workDir || WORK_DIR;
     const timeoutMs = opts.timeoutMs !== undefined ? opts.timeoutMs : PI_TIMEOUT_MS;
-    const extensions = !!opts.extensions;
 
     const args = [
       "--mode", "rpc",
-      "--provider", provider,
-      "--model", model,
+      "--provider", PROVIDER,
+      "--model", MODEL,
       "--session", sessionPath,
     ];
 
-    if (!extensions) {
-      args.push("--no-extensions");
-    }
-
-    if (opts.systemPrompt) {
-      args.push("--system-prompt", opts.systemPrompt);
-    }
-
     const sessionLabel = path.basename(sessionPath, ".jsonl");
     const sessionShort = sessionLabel.slice(0, 20);
-    log.info(
-      { session: sessionShort, file: sessionPath, provider, model, extensions },
-      "starting pi turn"
-    );
+    log.info({ session: sessionShort, file: sessionPath }, "starting pi turn");
 
     const turnStart = Date.now();
-    log.debug({ workDir }, "pi working directory");
     const pi = spawn("pi", args, {
       cwd: workDir,
       stdio: ["pipe", "pipe", "pipe"],
@@ -82,25 +59,12 @@ function runPiTurn(sessionPath, prompt, opts = {}) {
         if (!line.trim()) continue;
         try {
           const event = JSON.parse(line);
-
           if (event.type === "message_update") {
             const d = event.assistantMessageEvent;
             if (d?.type === "text_delta") {
               responseText += d.delta;
             }
           }
-
-          if (event.type === "tool_execution_start") {
-            log.info({ session: sessionShort, tool: event.toolName }, "tool call");
-          }
-
-          if (event.type === "tool_execution_result") {
-            const err = event.toolExecutionResult?.isError;
-            if (err) {
-              log.warn({ session: sessionShort, tool: event.toolName }, "tool error");
-            }
-          }
-
           if (event.type === "agent_end") {
             const elapsed = Date.now() - turnStart;
             log.info(
@@ -110,7 +74,7 @@ function runPiTurn(sessionPath, prompt, opts = {}) {
             pi.stdin.end();
           }
         } catch {
-          // skip non-JSON lines (stderr bleed, etc.)
+          // skip non-JSON lines
         }
       }
     });

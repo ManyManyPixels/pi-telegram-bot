@@ -8,9 +8,9 @@ const log = createLogger("server");
 
 const PORT = parseInt(process.env.WEBHOOK_PORT || "3001", 10);
 
-// Ensure directories and auto-register commands
+// Ensure session directory and register command handlers
 sessions.init();
-registry.autoRegister();
+require("./commands/comment");
 
 // ── GitHub webhook handler ────────────────────────────────────────────
 
@@ -20,15 +20,13 @@ function handleGithubWebhook(req, res) {
   const deliveryId = req.headers["x-github-delivery"];
   const contentType = (req.headers["content-type"] || "").split(";")[0].trim();
 
-  log.info({ eventType, deliveryId, contentType }, "github webhook request");
+  log.info({ eventType, deliveryId, contentType }, "webhook");
 
-  // Collect body as raw string for signature verification
   let body = "";
   req.on("data", (chunk) => (body += chunk));
   req.on("end", () => {
-    // Verify signature on the raw body
     if (!github.verifySignature(signature, body)) {
-      log.warn({ eventType, deliveryId }, "invalid github signature");
+      log.warn({ eventType, deliveryId }, "invalid signature");
       res.writeHead(401);
       return res.end("unauthorized");
     }
@@ -39,7 +37,6 @@ function handleGithubWebhook(req, res) {
         const params = new URLSearchParams(body);
         const encoded = params.get("payload");
         if (!encoded) {
-          log.error({ eventType, deliveryId }, "form-encoded body missing 'payload' param");
           res.writeHead(400);
           return res.end("bad request: missing payload");
         }
@@ -48,16 +45,15 @@ function handleGithubWebhook(req, res) {
         payload = JSON.parse(body);
       }
     } catch (err) {
-      log.error({ eventType, deliveryId, err }, "failed to parse webhook body");
+      log.error({ eventType, deliveryId, err }, "failed to parse body");
       res.writeHead(400);
       return res.end("bad request");
     }
 
-    // Ack immediately
+    // Ack immediately, then dispatch
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end("{}");
 
-    // Dispatch to all matching commands
     registry.dispatch(payload, eventType);
   });
 }
@@ -80,11 +76,4 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   log.info({ port: PORT }, "server started");
-  log.info(
-    {
-      model: `${process.env.PI_PROVIDER || "deepseek"}/${process.env.PI_MODEL || "deepseek-v4-pro"}`,
-      githubWebhook: "/github-webhook",
-    },
-    "configuration"
-  );
 });
