@@ -32,6 +32,15 @@ async function handler(payload) {
   }
 
   // Normal comment → pi turn
+  const commentId = payload.comment.id;
+
+  // 👀 react to show we're processing
+  try {
+    await gh.addCommentReaction(repo, commentId, "eyes");
+  } catch (err) {
+    log.warn({ err: err.message }, "failed to add eyes reaction");
+  }
+
   const sessionPath = isPr
     ? prSessionPath(number)
     : issueSessionPath(number);
@@ -48,6 +57,13 @@ async function handler(payload) {
     postTo: { type: isPr ? "pr" : "issue", repo, number },
     timeoutMs: 5 * 60 * 1000,
   });
+
+  // 👍 react to show we're done
+  try {
+    await gh.addCommentReaction(repo, commentId, "+1");
+  } catch (err) {
+    log.warn({ err: err.message }, "failed to add +1 reaction");
+  }
 }
 
 async function handleReset(sessionPath, repo, number, isPr) {
