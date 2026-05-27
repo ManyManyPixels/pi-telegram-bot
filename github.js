@@ -1,9 +1,11 @@
-const crypto = require("crypto");
-const { createLogger } = require("./utils/logger");
+import crypto from "crypto";
+import { execFile } from "child_process";
+import { createLogger } from "./utils/logger.js";
 
 const log = createLogger("github");
 
 const SECRET = (process.env.GITHUB_WEBHOOK_SECRET || "").trim();
+const BOT_USERNAME = (process.env.GITHUB_BOT_USERNAME || "").trim();
 
 if (SECRET) {
   log.info({ secretLen: SECRET.length }, "github webhook secret configured");
@@ -11,10 +13,16 @@ if (SECRET) {
   log.warn("GITHUB_WEBHOOK_SECRET not set — webhook will reject all requests");
 }
 
+if (BOT_USERNAME) {
+  log.info({ bot: BOT_USERNAME }, "bot username configured");
+} else {
+  log.warn("GITHUB_BOT_USERNAME not set — bot comment filtering may not work");
+}
+
 /**
  * Verify GitHub's X-Hub-Signature-256 header against our secret.
  */
-function verifySignature(signatureHeader, payload) {
+export function verifySignature(signatureHeader, payload) {
   if (!signatureHeader || !SECRET) {
     log.warn(
       { hasSig: !!signatureHeader, hasSecret: !!SECRET },
@@ -53,4 +61,38 @@ function verifySignature(signatureHeader, payload) {
   }
 }
 
-module.exports = { verifySignature };
+/**
+ * Returns true if the comment author is a bot that should be ignored.
+ * Filters the configured bot account AND any GitHub user with type "Bot"
+ * (github-actions[bot], dependabot, etc.).
+ */
+export function isBot(user) {
+  if (!user) return true;
+  if (BOT_USERNAME && user.login === BOT_USERNAME) return true;
+  if (user.type === "Bot") return true;
+  return false;
+}
+
+/**
+ * Post a comment on a GitHub issue or pull request via the `gh` CLI.
+ */
+export function postComment(owner, repo, number, body) {
+  return new Promise((resolve, reject) => {
+    const repoSlug = `${owner}/${repo}`;
+    log.info({ repo: repoSlug, number }, "posting comment");
+
+    const child = execFile("gh", [
+      "issue", "comment", String(number),
+      "--repo", repoSlug,
+      "--body", body,
+    ], { timeout: 30_000 }, (err, stdout, stderr) => {
+      if (err) {
+        log.error({ err, stderr }, "gh comment failed");
+        reject(err);
+      } else {
+        log.info({ stdout: stdout.trim() }, "comment posted");
+        resolve(stdout.trim());
+      }
+    });
+  });
+}

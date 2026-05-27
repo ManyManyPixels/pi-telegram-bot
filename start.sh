@@ -18,7 +18,7 @@ fuser -k "${WEBHOOK_PORT}/tcp" 2>/dev/null || true
 pkill -f "smee -u" 2>/dev/null || true
 sleep 0.5
 
-echo "=== PR Comment Logger ==="
+echo "=== Pi GitHub Bot ==="
 echo "Port: ${WEBHOOK_PORT}"
 echo ""
 

@@ -1,5 +1,8 @@
-const pino = require("pino");
-const path = require("path");
+import pino from "pino";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const LOG_LEVEL = process.env.LOG_LEVEL || "info";
 const LOG_DIR = path.resolve(
@@ -38,8 +41,6 @@ const rootLogger = pino(
  * Create a child logger with an automatic "module" field.
  * Every log line from this child will include { module: name }.
  */
-function createLogger(name) {
+export function createLogger(name) {
   return rootLogger.child({ module: name });
 }
-
-module.exports = { createLogger };

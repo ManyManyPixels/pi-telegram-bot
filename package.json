@@ -2,9 +2,11 @@
   "name": "pi-github-bot",
   "version": "1.0.0",
   "private": true,
-  "description": "Minimal webhook logger for PR comments",
+  "type": "module",
+  "description": "GitHub webhook bot that runs pi agent on issues and PRs",
   "main": "server.js",
   "dependencies": {
+    "@earendil-works/pi-coding-agent": "^0.74.0",
     "pino": "^8.21.0",
     "pino-pretty": "^11.2.0",
     "pino-roll": "^2.0.0"
