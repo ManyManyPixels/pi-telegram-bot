@@ -34,14 +34,21 @@ function handleWebhook(req, res) {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end("{}");
 
-    // ── Only log PR comments ──
+    // ── Debug: log every webhook event ──
+    log.info(
+      { eventType, action: payload.action, deliveryId },
+      "webhook received"
+    );
+
+    // ── Log PR comments from issue_comment events ──
     if (eventType === "issue_comment" && payload.action === "created") {
       const isPr = !!payload.issue?.pull_request;
+      log.info({ isPr, issueKeys: payload.issue ? Object.keys(payload.issue) : [] }, "issue_comment detail");
       if (isPr) {
         const repo = payload.repository?.full_name || "unknown";
         const prNumber = payload.issue?.number;
         const user = payload.comment?.user?.login || "unknown";
-        const body = (payload.comment?.body || "").trim();
+        const bodyText = (payload.comment?.body || "").trim();
         const commentId = payload.comment?.id;
 
         console.log("──────────────────────────────────────────");
@@ -51,9 +58,28 @@ function handleWebhook(req, res) {
         console.log(`   Comment:   ${commentId}`);
         console.log(`   Author:    @${user}`);
         console.log(`   Body:`);
-        console.log(`${body}`);
+        console.log(`${bodyText}`);
         console.log("──────────────────────────────────────────");
       }
+    }
+
+    // ── Also catch pull_request_review_comment events (inline PR comments) ──
+    if (eventType === "pull_request_review_comment" && payload.action === "created") {
+      const repo = payload.repository?.full_name || "unknown";
+      const prNumber = payload.pull_request?.number;
+      const user = payload.comment?.user?.login || "unknown";
+      const bodyText = (payload.comment?.body || "").trim();
+      const commentId = payload.comment?.id;
+
+      console.log("──────────────────────────────────────────");
+      console.log(`📨 PR REVIEW COMMENT (inline)`);
+      console.log(`   Repo:      ${repo}`);
+      console.log(`   PR:        #${prNumber}`);
+      console.log(`   Comment:   ${commentId}`);
+      console.log(`   Author:    @${user}`);
+      console.log(`   Body:`);
+      console.log(`${bodyText}`);
+      console.log("──────────────────────────────────────────");
     }
   });
 }
