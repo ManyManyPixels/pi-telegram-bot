@@ -40,6 +40,7 @@ const modelRegistry = ModelRegistry.create(authStorage);
 const settingsManager = SettingsManager.inMemory({
   compaction: { enabled: false },
   retry: { enabled: true, maxRetries: 2 },
+  packages: ["npm:pi-subagents"],
 });
 
 async function getOrCreateSession(owner, repo, kind, number) {
