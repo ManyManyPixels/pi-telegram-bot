@@ -16,6 +16,10 @@ import {
   PI_PROVIDER,
   PI_MODEL,
 } from "./constants.js";
+import * as issueOpened from "./events/issue-opened.js";
+import * as prOpened from "./events/pr-opened.js";
+import * as issueComment from "./events/issue-comment.js";
+import * as prReviewComment from "./events/pr-review-comment.js";
 
 const log = createLogger("server");
 
@@ -157,7 +161,7 @@ function handleWebhook(req, res) {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end("{}");
 
-    const { action, repository, issue, pull_request, comment } = payload;
+    const { action, repository } = payload;
     const owner = repository?.owner?.login;
     const repo = repository?.name;
 
@@ -168,106 +172,21 @@ function handleWebhook(req, res) {
 
     log.info({ eventType, action, deliveryId }, "webhook received");
 
+    // TODO: for issue & pull request opened events:
+    //   Use get_issue_content to get content and send it as first prompt.
+    //   Reply to this first prompt should be a short acknowledgment.
+
+    const ctx = { getOrCreateSession, isBot };
+
     try {
-      // TODO: extract events to separate files for better readability
-      // ── Issue opened ──────────────────────────────────────────
       if (eventType === "issues" && action === "opened") {
-        const isPR = !!payload.issue?.pull_request;
-        if (isPR) return; // PRs handled by pull_request event
-
-        const num = issue.number;
-        const title = issue.title || "";
-        const bodyText = issue.body || "";
-        const url =
-          issue.html_url || `https://github.com/${owner}/${repo}/issues/${num}`;
-        const prompt = `Source Issue: ${url}\n\n# ${title}\n\n${bodyText}`;
-
-        /* TODO: for issue & pull request opened events:
-*          No need to format prompt like we do it right now, use get_issue_content to get a content and send it as a first prompt.
-           Reply to this first prompt should be a short acknoledgement of the issue/pr. Agent should state it's readdiness to help.
-        */
-
-        const entry = await getOrCreateSession(owner, repo, "issue", num);
-        if (entry.busy) {
-          await entry.session.followUp(prompt);
-        } else {
-          await entry.session.prompt(prompt);
-        }
-      }
-
-      // ── PR opened ─────────────────────────────────────────────
-      if (eventType === "pull_request" && action === "opened") {
-        const num = pull_request.number;
-        const title = pull_request.title || "";
-        const bodyText = pull_request.body || "";
-        const url =
-          pull_request.html_url ||
-          `https://github.com/${owner}/${repo}/pull/${num}`;
-        const prompt = `Source PR: ${url}\n\n# ${title}\n\n${bodyText}`;
-
-        const entry = await getOrCreateSession(owner, repo, "pr", num);
-        if (entry.busy) {
-          await entry.session.followUp(prompt);
-        } else {
-          await entry.session.prompt(prompt);
-        }
-      }
-
-      // ── Issue/PR comment created ──────────────────────────────
-      if (eventType === "issue_comment" && action === "created") {
-        // Skip bot comments
-        if (isBot(comment?.user)) {
-          log.info({ user: comment?.user?.login }, "skipping bot comment");
-          return;
-        }
-
-        const isPR = !!payload.issue?.pull_request;
-        const kind = isPR ? "pr" : "issue";
-        const num = issue.number;
-        const bodyText = (comment?.body || "").trim();
-
-        if (!bodyText) return;
-
-        const url =
-          issue.html_url || `https://github.com/${owner}/${repo}/issues/${num}`;
-        const kindLabel = isPR ? "PR" : "Issue";
-        // TODO: no need to format message like this, just send bodyText as prompt
-        const prompt = `[Comment by @${comment.user.login} on ${kindLabel} #${num}](${url})\n\n${bodyText}`;
-
-        const entry = await getOrCreateSession(owner, repo, kind, num);
-        if (entry.busy) {
-          await entry.session.followUp(prompt);
-        } else {
-          await entry.session.prompt(prompt);
-        }
-      }
-
-      // ── PR review comment created (inline comments) ───────────
-      if (eventType === "pull_request_review_comment" && action === "created") {
-        if (isBot(comment?.user)) {
-          log.info(
-            { user: comment?.user?.login },
-            "skipping bot review comment",
-          );
-          return;
-        }
-
-        const num = pull_request.number;
-        const bodyText = (comment?.body || "").trim();
-
-        if (!bodyText) return;
-
-        const url =
-          pull_request.html_url ||
-          `https://github.com/${owner}/${repo}/pull/${num}`;
-        const prompt = `[Inline review comment by @${comment.user.login} on PR #${num}](${url})\n\n${bodyText}`;
-
-        const entry = await getOrCreateSession(owner, repo, "pr", num);
-        if (entry.busy) {
-          await entry.session.followUp(prompt);
-        } else {
-          await entry.session.prompt(prompt);
-        }
+        await issueOpened.handle(payload, ctx);
+      } else if (eventType === "pull_request" && action === "opened") {
+        await prOpened.handle(payload, ctx);
+      } else if (eventType === "issue_comment" && action === "created") {
+        await issueComment.handle(payload, ctx);
+      } else if (eventType === "pull_request_review_comment" && action === "created") {
+        await prReviewComment.handle(payload, ctx);
       }
     } catch (err) {
       log.error({ err, eventType, action }, "error processing webhook");
