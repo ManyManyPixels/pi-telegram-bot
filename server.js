@@ -172,10 +172,6 @@ function handleWebhook(req, res) {
 
     log.info({ eventType, action, deliveryId }, "webhook received");
 
-    // TODO: for issue & pull request opened events:
-    //   Use get_issue_content to get content and send it as first prompt.
-    //   Reply to this first prompt should be a short acknowledgment.
-
     const ctx = { getOrCreateSession, isBot };
 
     try {

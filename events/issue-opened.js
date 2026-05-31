@@ -1,5 +1,10 @@
+import { execFile } from "child_process";
+import path from "path";
+import { fileURLToPath } from "url";
 import { createLogger } from "../utils/logger.js";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const script = path.resolve(__dirname, "..", "get_issue_content.sh");
 const log = createLogger("events/issue-opened");
 
 /**
@@ -15,11 +20,10 @@ export async function handle(payload, { getOrCreateSession }) {
   const owner = repository.owner.login;
   const repo = repository.name;
   const num = issue.number;
-  const title = issue.title || "";
-  const bodyText = issue.body || "";
   const url =
     issue.html_url || `https://github.com/${owner}/${repo}/issues/${num}`;
-  const prompt = `Source Issue: ${url}\n\n# ${title}\n\n${bodyText}`;
+
+  const prompt = await fetchIssueContent(url, issue);
 
   const entry = await getOrCreateSession(owner, repo, "issue", num);
   if (entry.busy) {
@@ -29,4 +33,23 @@ export async function handle(payload, { getOrCreateSession }) {
   }
 
   log.info({ owner, repo, num }, "issue opened event processed");
+}
+
+/**
+ * Shell out to get_issue_content.sh. Falls back to manual formatting
+ * if the script is unavailable or fails.
+ */
+function fetchIssueContent(url, issue) {
+  return new Promise((resolve) => {
+    execFile(script, [url], { timeout: 15_000 }, (err, stdout) => {
+      if (err) {
+        log.warn({ err }, "get_issue_content.sh failed, falling back");
+        const title = issue.title || "";
+        const bodyText = issue.body || "";
+        resolve(`Source Issue: ${url}\n\n# ${title}\n\n${bodyText}`);
+        return;
+      }
+      resolve(stdout.trim());
+    });
+  });
 }
