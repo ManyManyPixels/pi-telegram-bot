@@ -1,2 +1,2 @@
-- [ ] Convert to typescript. Make auto completed work
-- [ ] Create get_issue_content.sh that returns the whole Github Issue context formatted, with all the comments in chronological order
+- [x] Convert to typescript. Make auto completed work
+- [x] Create get_issue_content.sh that returns the whole Github Issue context formatted, with all the comments in chronological order
