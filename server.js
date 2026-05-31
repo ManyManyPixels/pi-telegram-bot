@@ -109,14 +109,24 @@ async function getOrCreateSession(owner, repo, kind, number) {
     }
 
     if (event.type === "turn_end") {
-      // TODO: together with text block try also sending thinking process using markdown quote `>`
       const msg = event.message;
       if (msg.role === "assistant") {
+        // Collect thinking blocks and format as markdown quotes
+        const thinkingBlocks = msg.content
+          .filter((block) => block.type === "thinking")
+          .map((block) =>
+            block.thinking
+              .split("\n")
+              .map((line) => `> ${line}`)
+              .join("\n"),
+          );
+
         const textBlocks = msg.content
           .filter((block) => block.type === "text")
           .map((block) => block.text);
 
-        const replyText = textBlocks.join("").trim();
+        const parts = [...thinkingBlocks, ...textBlocks];
+        const replyText = parts.join("\n\n").trim();
         if (replyText) {
           log.info({ key, len: replyText.length }, "posting turn reply");
           postComment(owner, repo, number, replyText).catch((err) => {
