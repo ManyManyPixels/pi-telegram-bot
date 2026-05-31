@@ -11,8 +11,8 @@ export const PI_WORK_DIR = process.env.PI_WORK_DIR || process.cwd();
 export const PI_SESSION_DIR = path.resolve(
   process.env.PI_SESSION_DIR || path.join(__dirname, "sessions"),
 );
-export const PI_PROVIDER = process.env.PI_PROVIDER || undefined;
-export const PI_MODEL = process.env.PI_MODEL || undefined;
+export const PI_PROVIDER: string | undefined = process.env.PI_PROVIDER || undefined;
+export const PI_MODEL: string | undefined = process.env.PI_MODEL || undefined;
 
 // ── Logging ───────────────────────────────────────────────────────
 export const LOG_LEVEL = process.env.LOG_LEVEL || "info";

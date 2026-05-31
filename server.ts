@@ -1,5 +1,6 @@
 import http from "http";
 import path from "path";
+import fs from "fs";
 import {
   createAgentSession,
   SessionManager,
@@ -7,6 +8,7 @@ import {
   ModelRegistry,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
+import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { verifySignature, isBot, postComment } from "./github.js";
 import { createLogger } from "./utils/logger.js";
 import {
@@ -20,18 +22,29 @@ import * as issueOpened from "./events/issue-opened.js";
 import * as prOpened from "./events/pr-opened.js";
 import * as issueComment from "./events/issue-comment.js";
 import * as prReviewComment from "./events/pr-review-comment.js";
+import type { SessionEntry } from "./events/types.js";
 
 const log = createLogger("server");
 
 // ── Session tracking ──────────────────────────────────────────────
 // Key: "owner/repo/issue/42" or "owner/repo/pr/42"
-const sessions = new Map();
+const sessions = new Map<string, SessionEntry>();
 
-function sessionKey(owner, repo, kind, number) {
+function sessionKey(
+  owner: string,
+  repo: string,
+  kind: "issue" | "pr",
+  number: number,
+): string {
   return `${owner}/${repo}/${kind}/${number}`;
 }
 
-function sessionPath(owner, repo, kind, number) {
+function sessionPath(
+  owner: string,
+  repo: string,
+  kind: "issue" | "pr",
+  number: number,
+): string {
   return path.join(PI_SESSION_DIR, `${owner}-${repo}-${kind}-${number}.jsonl`);
 }
 
@@ -44,7 +57,12 @@ const settingsManager = SettingsManager.inMemory({
   packages: ["npm:pi-subagents"],
 });
 
-async function getOrCreateSession(owner, repo, kind, number) {
+async function getOrCreateSession(
+  owner: string,
+  repo: string,
+  kind: "issue" | "pr",
+  number: number,
+): Promise<SessionEntry> {
   const key = sessionKey(owner, repo, kind, number);
   const filePath = sessionPath(owner, repo, kind, number);
 
@@ -53,10 +71,9 @@ async function getOrCreateSession(owner, repo, kind, number) {
   if (cached) return cached;
 
   // Check if session file already exists on disk
-  const fs = await import("fs");
   const exists = fs.existsSync(filePath);
 
-  let sessionManager;
+  let sessionManager: SessionManager;
   if (exists) {
     log.info({ key, filePath }, "opening existing session");
     sessionManager = SessionManager.open(filePath);
@@ -68,7 +85,7 @@ async function getOrCreateSession(owner, repo, kind, number) {
     sessionManager.setSessionFile(filePath);
   }
 
-  const createOptions = {
+  const createOptions: Record<string, unknown> = {
     cwd: PI_WORK_DIR,
     sessionManager,
     authStorage,
@@ -77,7 +94,6 @@ async function getOrCreateSession(owner, repo, kind, number) {
   };
 
   if (PI_PROVIDER && PI_MODEL) {
-    // Find model by provider/id
     const available = await modelRegistry.getAvailable();
     const model = available.find(
       (m) => m.provider === PI_PROVIDER && m.id === PI_MODEL,
@@ -91,13 +107,12 @@ async function getOrCreateSession(owner, repo, kind, number) {
     }
   }
 
-  const { session } = await createAgentSession(createOptions);
-
-  const entry = { session, busy: false, key, filePath };
+  const { session } = await createAgentSession(createOptions as any);
+  const entry: SessionEntry = { session, busy: false, key, filePath };
   sessions.set(key, entry);
 
   // Subscribe to events
-  session.subscribe((event) => {
+  session.subscribe((event: AgentSessionEvent) => {
     if (event.type === "agent_start") {
       entry.busy = true;
       log.info({ key }, "agent started");
@@ -112,18 +127,23 @@ async function getOrCreateSession(owner, repo, kind, number) {
       const msg = event.message;
       if (msg.role === "assistant") {
         // Collect thinking blocks and format as markdown quotes
-        const thinkingBlocks = msg.content
+        const content = msg.content as Array<{
+          type: string;
+          text?: string;
+          thinking?: string;
+        }>;
+        const thinkingBlocks = content
           .filter((block) => block.type === "thinking")
           .map((block) =>
-            block.thinking
+            (block.thinking || "")
               .split("\n")
               .map((line) => `> ${line}`)
               .join("\n"),
           );
 
-        const textBlocks = msg.content
+        const textBlocks = content
           .filter((block) => block.type === "text")
-          .map((block) => block.text);
+          .map((block) => block.text || "");
 
         const parts = [...thinkingBlocks, ...textBlocks];
         const replyText = parts.join("\n\n").trim();
@@ -142,21 +162,30 @@ async function getOrCreateSession(owner, repo, kind, number) {
 
 // ── Webhook handler ────────────────────────────────────────────────
 
-function handleWebhook(req, res) {
-  const signature = req.headers["x-hub-signature-256"];
-  const eventType = req.headers["x-github-event"];
-  const deliveryId = req.headers["x-github-delivery"];
+interface WebhookPayload {
+  action?: string;
+  repository?: {
+    owner?: { login?: string };
+    name?: string;
+  };
+  [key: string]: unknown;
+}
+
+function handleWebhook(req: http.IncomingMessage, res: http.ServerResponse): void {
+  const signature = req.headers["x-hub-signature-256"] as string | undefined;
+  const eventType = req.headers["x-github-event"] as string | undefined;
+  const deliveryId = req.headers["x-github-delivery"] as string | undefined;
   const contentType = (req.headers["content-type"] || "").split(";")[0].trim();
 
   let body = "";
-  req.on("data", (chunk) => (body += chunk));
+  req.on("data", (chunk: string) => (body += chunk));
   req.on("end", async () => {
     if (!verifySignature(signature, body)) {
       res.writeHead(401);
       return res.end("unauthorized");
     }
 
-    let payload;
+    let payload: WebhookPayload;
     try {
       payload =
         contentType === "application/x-www-form-urlencoded"
@@ -191,7 +220,10 @@ function handleWebhook(req, res) {
         await prOpened.handle(payload, ctx);
       } else if (eventType === "issue_comment" && action === "created") {
         await issueComment.handle(payload, ctx);
-      } else if (eventType === "pull_request_review_comment" && action === "created") {
+      } else if (
+        eventType === "pull_request_review_comment" &&
+        action === "created"
+      ) {
         await prReviewComment.handle(payload, ctx);
       }
     } catch (err) {

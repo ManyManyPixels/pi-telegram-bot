@@ -1,12 +1,12 @@
 import { createLogger } from "../utils/logger.js";
+import type { EventContext } from "./types.js";
 
 const log = createLogger("events/pr-review-comment");
 
-/**
- * Handle `pull_request_review_comment` / `created` webhook event.
- * Inline review comments on PR diffs.
- */
-export async function handle(payload, { getOrCreateSession, isBot }) {
+export async function handle(
+  payload: Record<string, any>,
+  { getOrCreateSession, isBot }: EventContext,
+): Promise<void> {
   const { repository, pull_request, comment } = payload;
 
   // Skip bot comments
@@ -15,13 +15,13 @@ export async function handle(payload, { getOrCreateSession, isBot }) {
     return;
   }
 
-  const num = pull_request.number;
-  const prompt = (comment?.body || "").trim();
+  const num: number = pull_request.number;
+  const prompt: string = (comment?.body || "").trim();
 
   if (!prompt) return;
 
-  const owner = repository.owner.login;
-  const repo = repository.name;
+  const owner: string = repository.owner.login;
+  const repo: string = repository.name;
 
   const entry = await getOrCreateSession(owner, repo, "pr", num);
   if (entry.busy) {

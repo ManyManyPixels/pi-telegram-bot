@@ -23,7 +23,7 @@ echo "Port: ${WEBHOOK_PORT}"
 echo ""
 
 # Start server
-cd "$SCRIPT_DIR" && node server.js &
+cd "$SCRIPT_DIR" && npx tsx server.ts &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 

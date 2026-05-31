@@ -1,12 +1,12 @@
 import { createLogger } from "../utils/logger.js";
+import type { EventContext } from "./types.js";
 
 const log = createLogger("events/issue-comment");
 
-/**
- * Handle `issue_comment` / `created` webhook event.
- * Works for both issues and PRs.
- */
-export async function handle(payload, { getOrCreateSession, isBot }) {
+export async function handle(
+  payload: Record<string, any>,
+  { getOrCreateSession, isBot }: EventContext,
+): Promise<void> {
   const { repository, issue, comment } = payload;
 
   // Skip bot comments
@@ -17,13 +17,13 @@ export async function handle(payload, { getOrCreateSession, isBot }) {
 
   const isPR = !!issue?.pull_request;
   const kind = isPR ? "pr" : "issue";
-  const num = issue.number;
-  const prompt = (comment?.body || "").trim();
+  const num: number = issue.number;
+  const prompt: string = (comment?.body || "").trim();
 
   if (!prompt) return;
 
-  const owner = repository.owner.login;
-  const repo = repository.name;
+  const owner: string = repository.owner.login;
+  const repo: string = repository.name;
   const entry = await getOrCreateSession(owner, repo, kind, num);
   if (entry.busy) {
     await entry.session.followUp(prompt);

@@ -4,11 +4,21 @@
   "private": true,
   "type": "module",
   "description": "GitHub webhook bot that runs pi agent on issues and PRs",
-  "main": "server.js",
+  "main": "server.ts",
+  "scripts": {
+    "start": "tsx server.ts",
+    "dev": "tsx watch server.ts",
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^0.74.0",
     "pino": "^8.21.0",
     "pino-pretty": "^11.2.0",
     "pino-roll": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3"
   }
 }

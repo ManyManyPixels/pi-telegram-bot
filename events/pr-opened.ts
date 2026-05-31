@@ -2,21 +2,22 @@ import { execFile } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createLogger } from "../utils/logger.js";
+import type { EventContext } from "./types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const script = path.resolve(__dirname, "..", "get_issue_content.sh");
 const log = createLogger("events/pr-opened");
 
-/**
- * Handle `pull_request` / `opened` webhook event.
- */
-export async function handle(payload, { getOrCreateSession }) {
+export async function handle(
+  payload: Record<string, any>,
+  { getOrCreateSession }: EventContext,
+): Promise<void> {
   const { repository, pull_request } = payload;
 
-  const owner = repository.owner.login;
-  const repo = repository.name;
-  const num = pull_request.number;
-  const url =
+  const owner: string = repository.owner.login;
+  const repo: string = repository.name;
+  const num: number = pull_request.number;
+  const url: string =
     pull_request.html_url ||
     `https://github.com/${owner}/${repo}/pull/${num}`;
 
@@ -32,17 +33,13 @@ export async function handle(payload, { getOrCreateSession }) {
   log.info({ owner, repo, num }, "PR opened event processed");
 }
 
-/**
- * Shell out to get_issue_content.sh. Falls back to manual formatting
- * if the script is unavailable or fails.
- */
-function fetchIssueContent(url, issueOrPr) {
+function fetchIssueContent(url: string, issueOrPr: Record<string, any>): Promise<string> {
   return new Promise((resolve) => {
     execFile(script, [url], { timeout: 15_000 }, (err, stdout) => {
       if (err) {
         log.warn({ err }, "get_issue_content.sh failed, falling back");
-        const title = issueOrPr.title || "";
-        const bodyText = issueOrPr.body || "";
+        const title: string = issueOrPr.title || "";
+        const bodyText: string = issueOrPr.body || "";
         resolve(`Source PR: ${url}\n\n# ${title}\n\n${bodyText}`);
         return;
       }
