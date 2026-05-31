@@ -1,13 +1,6 @@
 import pino from "pino";
 import path from "path";
-import { fileURLToPath } from "url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-const LOG_LEVEL = process.env.LOG_LEVEL || "info";
-const LOG_DIR = path.resolve(
-  process.env.LOG_DIR || path.join(__dirname, "..", "logs")
-);
+import { LOG_LEVEL, LOG_DIR } from "../constants.js";
 
 const transport = pino.transport({
   targets: [

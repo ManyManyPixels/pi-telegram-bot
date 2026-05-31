@@ -1,6 +1,5 @@
 import http from "http";
 import path from "path";
-import { fileURLToPath } from "url";
 import {
   createAgentSession,
   SessionManager,
@@ -10,18 +9,15 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { verifySignature, isBot, postComment } from "./github.js";
 import { createLogger } from "./utils/logger.js";
+import {
+  PORT,
+  PI_WORK_DIR,
+  PI_SESSION_DIR,
+  PI_PROVIDER,
+  PI_MODEL,
+} from "./constants.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const log = createLogger("server");
-
-// TODO: instead of holding these values in env, let's create constants file for these values. only hold secrets in env.
-const PORT = parseInt(process.env.WEBHOOK_PORT || "3001", 10);
-const PI_WORK_DIR = process.env.PI_WORK_DIR || process.cwd();
-const PI_SESSION_DIR = path.resolve(
-  process.env.PI_SESSION_DIR || path.join(__dirname, "sessions"),
-);
-const PI_PROVIDER = process.env.PI_PROVIDER || undefined;
-const PI_MODEL = process.env.PI_MODEL || undefined;
 
 // ── Session tracking ──────────────────────────────────────────────
 // Key: "owner/repo/issue/42" or "owner/repo/pr/42"
