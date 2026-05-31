@@ -18,14 +18,9 @@ export async function handle(payload, { getOrCreateSession, isBot }) {
   const isPR = !!issue?.pull_request;
   const kind = isPR ? "pr" : "issue";
   const num = issue.number;
-  const bodyText = (comment?.body || "").trim();
+  const prompt = (comment?.body || "").trim();
 
-  if (!bodyText) return;
-
-  const url =
-    issue.html_url || `https://github.com/${repository.owner.login}/${repository.name}/issues/${num}`;
-  const kindLabel = isPR ? "PR" : "Issue";
-  const prompt = `[Comment by @${comment.user.login} on ${kindLabel} #${num}](${url})\n\n${bodyText}`;
+  if (!prompt) return;
 
   const owner = repository.owner.login;
   const repo = repository.name;

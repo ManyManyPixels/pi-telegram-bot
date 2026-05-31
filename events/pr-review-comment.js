@@ -16,16 +16,12 @@ export async function handle(payload, { getOrCreateSession, isBot }) {
   }
 
   const num = pull_request.number;
-  const bodyText = (comment?.body || "").trim();
+  const prompt = (comment?.body || "").trim();
 
-  if (!bodyText) return;
+  if (!prompt) return;
 
   const owner = repository.owner.login;
   const repo = repository.name;
-  const url =
-    pull_request.html_url ||
-    `https://github.com/${owner}/${repo}/pull/${num}`;
-  const prompt = `[Inline review comment by @${comment.user.login} on PR #${num}](${url})\n\n${bodyText}`;
 
   const entry = await getOrCreateSession(owner, repo, "pr", num);
   if (entry.busy) {
