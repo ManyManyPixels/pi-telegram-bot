@@ -14,10 +14,11 @@ import { createLogger } from "./utils/logger.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const log = createLogger("server");
 
+// TODO: instead of holding these values in env, let's create constants file for these values. only hold secrets in env.
 const PORT = parseInt(process.env.WEBHOOK_PORT || "3001", 10);
 const PI_WORK_DIR = process.env.PI_WORK_DIR || process.cwd();
 const PI_SESSION_DIR = path.resolve(
-  process.env.PI_SESSION_DIR || path.join(__dirname, "sessions")
+  process.env.PI_SESSION_DIR || path.join(__dirname, "sessions"),
 );
 const PI_PROVIDER = process.env.PI_PROVIDER || undefined;
 const PI_MODEL = process.env.PI_MODEL || undefined;
@@ -79,11 +80,14 @@ async function getOrCreateSession(owner, repo, kind, number) {
     // Find model by provider/id
     const available = await modelRegistry.getAvailable();
     const model = available.find(
-      (m) => m.provider === PI_PROVIDER && m.id === PI_MODEL
+      (m) => m.provider === PI_PROVIDER && m.id === PI_MODEL,
     );
     if (model) {
       createOptions.model = model;
-      log.info({ provider: PI_PROVIDER, model: PI_MODEL }, "using configured model");
+      log.info(
+        { provider: PI_PROVIDER, model: PI_MODEL },
+        "using configured model",
+      );
     }
   }
 
@@ -105,7 +109,7 @@ async function getOrCreateSession(owner, repo, kind, number) {
     }
 
     if (event.type === "turn_end") {
-      // Extract text blocks from the assistant message
+      // TODO: together with text block try also sending thinking process using markdown quote `>`
       const msg = event.message;
       if (msg.role === "assistant") {
         const textBlocks = msg.content
@@ -144,9 +148,10 @@ function handleWebhook(req, res) {
 
     let payload;
     try {
-      payload = contentType === "application/x-www-form-urlencoded"
-        ? JSON.parse(new URLSearchParams(body).get("payload") || "{}")
-        : JSON.parse(body);
+      payload =
+        contentType === "application/x-www-form-urlencoded"
+          ? JSON.parse(new URLSearchParams(body).get("payload") || "{}")
+          : JSON.parse(body);
     } catch {
       res.writeHead(400);
       return res.end("bad request");
@@ -156,7 +161,7 @@ function handleWebhook(req, res) {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end("{}");
 
-    const { action, repository, issue, pull_request, comment, sender } = payload;
+    const { action, repository, issue, pull_request, comment } = payload;
     const owner = repository?.owner?.login;
     const repo = repository?.name;
 
@@ -168,6 +173,7 @@ function handleWebhook(req, res) {
     log.info({ eventType, action, deliveryId }, "webhook received");
 
     try {
+      // TODO: extract events to separate files for better readability
       // ── Issue opened ──────────────────────────────────────────
       if (eventType === "issues" && action === "opened") {
         const isPR = !!payload.issue?.pull_request;
@@ -176,8 +182,14 @@ function handleWebhook(req, res) {
         const num = issue.number;
         const title = issue.title || "";
         const bodyText = issue.body || "";
-        const url = issue.html_url || `https://github.com/${owner}/${repo}/issues/${num}`;
+        const url =
+          issue.html_url || `https://github.com/${owner}/${repo}/issues/${num}`;
         const prompt = `Source Issue: ${url}\n\n# ${title}\n\n${bodyText}`;
+
+        /* TODO: for issue & pull request opened events:
+*          No need to format prompt like we do it right now, use get_issue_content to get a content and send it as a first prompt.
+           Reply to this first prompt should be a short acknoledgement of the issue/pr. Agent should state it's readdiness to help.
+        */
 
         const entry = await getOrCreateSession(owner, repo, "issue", num);
         if (entry.busy) {
@@ -192,7 +204,9 @@ function handleWebhook(req, res) {
         const num = pull_request.number;
         const title = pull_request.title || "";
         const bodyText = pull_request.body || "";
-        const url = pull_request.html_url || `https://github.com/${owner}/${repo}/pull/${num}`;
+        const url =
+          pull_request.html_url ||
+          `https://github.com/${owner}/${repo}/pull/${num}`;
         const prompt = `Source PR: ${url}\n\n# ${title}\n\n${bodyText}`;
 
         const entry = await getOrCreateSession(owner, repo, "pr", num);
@@ -218,8 +232,10 @@ function handleWebhook(req, res) {
 
         if (!bodyText) return;
 
-        const url = issue.html_url || `https://github.com/${owner}/${repo}/issues/${num}`;
+        const url =
+          issue.html_url || `https://github.com/${owner}/${repo}/issues/${num}`;
         const kindLabel = isPR ? "PR" : "Issue";
+        // TODO: no need to format message like this, just send bodyText as prompt
         const prompt = `[Comment by @${comment.user.login} on ${kindLabel} #${num}](${url})\n\n${bodyText}`;
 
         const entry = await getOrCreateSession(owner, repo, kind, num);
@@ -233,7 +249,10 @@ function handleWebhook(req, res) {
       // ── PR review comment created (inline comments) ───────────
       if (eventType === "pull_request_review_comment" && action === "created") {
         if (isBot(comment?.user)) {
-          log.info({ user: comment?.user?.login }, "skipping bot review comment");
+          log.info(
+            { user: comment?.user?.login },
+            "skipping bot review comment",
+          );
           return;
         }
 
@@ -242,7 +261,9 @@ function handleWebhook(req, res) {
 
         if (!bodyText) return;
 
-        const url = pull_request.html_url || `https://github.com/${owner}/${repo}/pull/${num}`;
+        const url =
+          pull_request.html_url ||
+          `https://github.com/${owner}/${repo}/pull/${num}`;
         const prompt = `[Inline review comment by @${comment.user.login} on PR #${num}](${url})\n\n${bodyText}`;
 
         const entry = await getOrCreateSession(owner, repo, "pr", num);
@@ -269,5 +290,8 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  log.info({ port: PORT, workDir: PI_WORK_DIR, sessionDir: PI_SESSION_DIR }, "server started");
+  log.info(
+    { port: PORT, workDir: PI_WORK_DIR, sessionDir: PI_SESSION_DIR },
+    "server started",
+  );
 });
