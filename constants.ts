@@ -16,6 +16,4 @@ export const PI_MODEL: string | undefined = process.env.PI_MODEL || undefined;
 
 // ── Logging ───────────────────────────────────────────────────────
 export const LOG_LEVEL = process.env.LOG_LEVEL || "info";
-export const LOG_DIR = path.resolve(
-  process.env.LOG_DIR || path.join(__dirname, "logs"),
-);
+export const LOG_DIR = path.resolve(process.env.LOG_DIR || path.join(__dirname, "logs"));

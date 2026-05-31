@@ -1,28 +1,22 @@
-import http from "http";
-import path from "path";
-import fs from "fs";
+import type { AgentSessionEvent, CreateAgentSessionOptions } from "@earendil-works/pi-coding-agent";
 import {
-  createAgentSession,
-  SessionManager,
   AuthStorage,
+  createAgentSession,
   ModelRegistry,
+  SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
-import { verifySignature, isBot, postComment } from "./github.js";
-import { createLogger } from "./utils/logger.js";
-import {
-  PORT,
-  PI_WORK_DIR,
-  PI_SESSION_DIR,
-  PI_PROVIDER,
-  PI_MODEL,
-} from "./constants.js";
+import fs from "fs";
+import http from "http";
+import path from "path";
+import { PI_MODEL, PI_PROVIDER, PI_SESSION_DIR, PI_WORK_DIR, PORT } from "./constants.js";
+import * as issueComment from "./events/issue-comment.js";
 import * as issueOpened from "./events/issue-opened.js";
 import * as prOpened from "./events/pr-opened.js";
-import * as issueComment from "./events/issue-comment.js";
 import * as prReviewComment from "./events/pr-review-comment.js";
 import type { SessionEntry } from "./events/types.js";
+import { isBot, postComment, verifySignature } from "./github.js";
+import { createLogger } from "./utils/logger.js";
 
 const log = createLogger("server");
 
@@ -30,21 +24,11 @@ const log = createLogger("server");
 // Key: "owner/repo/issue/42" or "owner/repo/pr/42"
 const sessions = new Map<string, SessionEntry>();
 
-function sessionKey(
-  owner: string,
-  repo: string,
-  kind: "issue" | "pr",
-  number: number,
-): string {
+function sessionKey(owner: string, repo: string, kind: "issue" | "pr", number: number): string {
   return `${owner}/${repo}/${kind}/${number}`;
 }
 
-function sessionPath(
-  owner: string,
-  repo: string,
-  kind: "issue" | "pr",
-  number: number,
-): string {
+function sessionPath(owner: string, repo: string, kind: "issue" | "pr", number: number): string {
   return path.join(PI_SESSION_DIR, `${owner}-${repo}-${kind}-${number}.jsonl`);
 }
 
@@ -85,7 +69,7 @@ async function getOrCreateSession(
     sessionManager.setSessionFile(filePath);
   }
 
-  const createOptions: Record<string, unknown> = {
+  const createOptions: CreateAgentSessionOptions = {
     cwd: PI_WORK_DIR,
     sessionManager,
     authStorage,
@@ -95,19 +79,14 @@ async function getOrCreateSession(
 
   if (PI_PROVIDER && PI_MODEL) {
     const available = await modelRegistry.getAvailable();
-    const model = available.find(
-      (m) => m.provider === PI_PROVIDER && m.id === PI_MODEL,
-    );
+    const model = available.find((m) => m.provider === PI_PROVIDER && m.id === PI_MODEL);
     if (model) {
       createOptions.model = model;
-      log.info(
-        { provider: PI_PROVIDER, model: PI_MODEL },
-        "using configured model",
-      );
+      log.info({ provider: PI_PROVIDER, model: PI_MODEL }, "using configured model");
     }
   }
 
-  const { session } = await createAgentSession(createOptions as any);
+  const { session } = await createAgentSession(createOptions);
   const entry: SessionEntry = { session, busy: false, key, filePath };
   sessions.set(key, entry);
 
@@ -220,10 +199,7 @@ function handleWebhook(req: http.IncomingMessage, res: http.ServerResponse): voi
         await prOpened.handle(payload, ctx);
       } else if (eventType === "issue_comment" && action === "created") {
         await issueComment.handle(payload, ctx);
-      } else if (
-        eventType === "pull_request_review_comment" &&
-        action === "created"
-      ) {
+      } else if (eventType === "pull_request_review_comment" && action === "created") {
         await prReviewComment.handle(payload, ctx);
       }
     } catch (err) {
@@ -243,8 +219,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  log.info(
-    { port: PORT, workDir: PI_WORK_DIR, sessionDir: PI_SESSION_DIR },
-    "server started",
-  );
+  log.info({ port: PORT, workDir: PI_WORK_DIR, sessionDir: PI_SESSION_DIR }, "server started");
 });

@@ -1,5 +1,5 @@
-import crypto from "crypto";
 import { execFile } from "child_process";
+import crypto from "crypto";
 import { createLogger } from "./utils/logger.js";
 
 const log = createLogger("github");
@@ -28,10 +28,7 @@ export interface GitHubUser {
 /**
  * Verify GitHub's X-Hub-Signature-256 header against our secret.
  */
-export function verifySignature(
-  signatureHeader: string | undefined,
-  payload: string,
-): boolean {
+export function verifySignature(signatureHeader: string | undefined, payload: string): boolean {
   if (!signatureHeader || !SECRET) {
     log.warn(
       { hasSig: !!signatureHeader, hasSecret: !!SECRET },
@@ -40,12 +37,7 @@ export function verifySignature(
     return false;
   }
   try {
-    const computed =
-      "sha256=" +
-      crypto
-        .createHmac("sha256", SECRET)
-        .update(payload, "utf8")
-        .digest("hex");
+    const computed = `sha256=${crypto.createHmac("sha256", SECRET).update(payload, "utf8").digest("hex")}`;
 
     const expected = signatureHeader.trim();
 
@@ -56,10 +48,7 @@ export function verifySignature(
       );
     }
 
-    const valid = crypto.timingSafeEqual(
-      Buffer.from(computed),
-      Buffer.from(expected),
-    );
+    const valid = crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(expected));
 
     if (!valid) {
       log.warn("signature mismatch");
@@ -97,17 +86,9 @@ export function postComment(
     const repoSlug = `${owner}/${repo}`;
     log.info({ repo: repoSlug, number }, "posting comment");
 
-    const child = execFile(
+    const _child = execFile(
       "gh",
-      [
-        "issue",
-        "comment",
-        String(number),
-        "--repo",
-        repoSlug,
-        "--body",
-        body,
-      ],
+      ["issue", "comment", String(number), "--repo", repoSlug, "--body", body],
       { timeout: 30_000 },
       (err, stdout, stderr) => {
         if (err) {
