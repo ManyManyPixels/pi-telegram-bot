@@ -1,4 +1,5 @@
 import { execFile } from "child_process";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createLogger } from "../utils/logger.js";
@@ -6,6 +7,10 @@ import type { EventContext } from "./types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const script = path.resolve(__dirname, "..", "get_issue_content.sh");
+const systemPrompt = fs.readFileSync(
+  path.resolve(__dirname, "..", "prompts", "issue-opened.md"),
+  "utf-8",
+).trim();
 const log = createLogger("events/issue-opened");
 
 export async function handle(
@@ -35,17 +40,20 @@ export async function handle(
   log.info({ owner, repo, num }, "issue opened event processed");
 }
 
-function fetchIssueContent(url: string, issue: Record<string, any>): Promise<string> {
+function fetchIssueContent(
+  url: string,
+  issue: Record<string, any>,
+): Promise<string> {
   return new Promise((resolve) => {
     execFile(script, [url], { timeout: 15_000 }, (err, stdout) => {
       if (err) {
         log.warn({ err }, "get_issue_content.sh failed, falling back");
         const title: string = issue.title || "";
         const bodyText: string = issue.body || "";
-        resolve(`Source Issue: ${url}\n\n# ${title}\n\n${bodyText}`);
+        resolve(`${systemPrompt}\nSource Issue: ${url}\n\n# ${title}\n\n${bodyText}`);
         return;
       }
-      resolve(stdout.trim());
+      resolve(`${systemPrompt}\n${stdout.trim()}\n`);
     });
   });
 }

@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 import type { AgentSessionEvent, CreateAgentSessionOptions } from "@earendil-works/pi-coding-agent";
 import {
   AuthStorage,
@@ -9,12 +11,13 @@ import {
 import fs from "fs";
 import http from "http";
 import path from "path";
-import { PI_MODEL, PI_PROVIDER, PI_SESSION_DIR, PI_WORK_DIR, PORT } from "./constants.js";
+import { PI_MODEL, PI_PROVIDER, PI_WORK_BASE, PORT } from "./constants.js";
 import * as issueComment from "./events/issue-comment.js";
 import * as issueOpened from "./events/issue-opened.js";
 import * as prOpened from "./events/pr-opened.js";
 import * as prReviewComment from "./events/pr-review-comment.js";
 import type { SessionEntry } from "./events/types.js";
+import { ensureRepo, resolveBranch, workdirFor } from "./git.js";
 import { isBot, postComment, verifySignature } from "./github.js";
 import { createLogger } from "./utils/logger.js";
 
@@ -29,7 +32,7 @@ function sessionKey(owner: string, repo: string, kind: "issue" | "pr", number: n
 }
 
 function sessionPath(owner: string, repo: string, kind: "issue" | "pr", number: number): string {
-  return path.join(PI_SESSION_DIR, `${owner}-${repo}-${kind}-${number}.jsonl`);
+  return path.join(workdirFor(owner, repo), ".pi-sessions", `${kind}-${number}.jsonl`);
 }
 
 // ── Pi setup ──────────────────────────────────────────────────────
@@ -56,21 +59,23 @@ async function getOrCreateSession(
 
   // Check if session file already exists on disk
   const exists = fs.existsSync(filePath);
+  const workDir = workdirFor(owner, repo);
+  const sessionDir = path.join(workDir, ".pi-sessions");
 
   let sessionManager: SessionManager;
   if (exists) {
     log.info({ key, filePath }, "opening existing session");
     sessionManager = SessionManager.open(filePath);
   } else {
-    log.info({ key, filePath }, "creating new session");
+    log.info({ key, filePath, workDir }, "creating new session");
     await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-    sessionManager = SessionManager.create(PI_WORK_DIR, PI_SESSION_DIR);
+    sessionManager = SessionManager.create(workDir, sessionDir);
     // Rename to our convention-based path before any data is written
     sessionManager.setSessionFile(filePath);
   }
 
   const createOptions: CreateAgentSessionOptions = {
-    cwd: PI_WORK_DIR,
+    cwd: workDir,
     sessionManager,
     authStorage,
     modelRegistry,
@@ -100,6 +105,14 @@ async function getOrCreateSession(
     if (event.type === "agent_end") {
       entry.busy = false;
       log.info({ key }, "agent ended");
+      const prefix = `${owner}/${repo}/`;
+      let busyCount = 0;
+      for (const [k, e] of sessions) {
+        if (k.startsWith(prefix) && e.busy) busyCount++;
+      }
+      if (busyCount === 0) {
+        log.info({ owner, repo }, "repo has zero busy sessions (eligible for cleanup)");
+      }
     }
 
     if (event.type === "turn_end") {
@@ -126,7 +139,7 @@ async function getOrCreateSession(
 
         const parts = [...thinkingBlocks, ...textBlocks];
         const replyText = parts.join("\n\n").trim();
-        if (replyText) {
+        if (replyText && textBlocks.length > 0) {
           log.info({ key, len: replyText.length }, "posting turn reply");
           postComment(owner, repo, number, replyText).catch((err) => {
             log.error({ err, key }, "failed to post turn reply");
@@ -183,12 +196,40 @@ function handleWebhook(req: http.IncomingMessage, res: http.ServerResponse): voi
     const owner = repository?.owner?.login;
     const repo = repository?.name;
 
-    if (!owner || !repo) {
-      log.warn({ eventType, action }, "missing owner/repo in payload");
+    if (!eventType || !owner || !repo) {
+      log.warn({ eventType, action }, "missing eventType or owner/repo in payload");
       return;
     }
 
     log.info({ eventType, action, deliveryId }, "webhook received");
+
+    // Skip bot-triggered events early to prevent error-comment loops
+    if (eventType === "issue_comment" && isBot(payload.comment?.user)) {
+      log.info("skipping bot comment (early)");
+      return;
+    }
+
+    // ── Ensure repo is cloned and on the right ref ───────────────
+    try {
+      const ref = await resolveBranch(eventType, action, payload);
+      const workdir = await ensureRepo(owner, repo, ref);
+      log.info({ owner, repo, ref, workdir }, "repo ready");
+    } catch (err) {
+      log.error({ err, owner, repo }, "failed to ensure repo");
+      // Only post error comment for non-bot events (prevents loops)
+      if (eventType !== "issue_comment" || !isBot(payload.comment?.user)) {
+        const issueNumber = extractIssueNumber(eventType, payload);
+        if (issueNumber) {
+          postComment(
+            owner,
+            repo,
+            issueNumber,
+            "❌ I couldn't access the repository to review your request. Please make sure the bot has read access to this repository.",
+          ).catch(() => {});
+        }
+      }
+      return;
+    }
 
     const ctx = { getOrCreateSession, isBot };
 
@@ -208,6 +249,17 @@ function handleWebhook(req: http.IncomingMessage, res: http.ServerResponse): voi
   });
 }
 
+/** Extract issue/PR number from a webhook payload for error-reporting comments. */
+function extractIssueNumber(eventType: string, payload: Record<string, any>): number | undefined {
+  if (eventType === "issues" || eventType === "issue_comment") {
+    return payload.issue?.number;
+  }
+  if (eventType === "pull_request" || eventType === "pull_request_review_comment") {
+    return payload.pull_request?.number;
+  }
+  return undefined;
+}
+
 // ── Server ─────────────────────────────────────────────────────────
 
 const server = http.createServer((req, res) => {
@@ -219,5 +271,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  log.info({ port: PORT, workDir: PI_WORK_DIR, sessionDir: PI_SESSION_DIR }, "server started");
+  log.info({ port: PORT, workBase: PI_WORK_BASE }, "server started");
 });
