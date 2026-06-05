@@ -73,6 +73,62 @@ export function isBot(user: GitHubUser | undefined): boolean {
   return false;
 }
 
+/** GitHub reaction emoji names (as accepted by the API). */
+export type Reaction = "eyes" | "+1" | "-1" | "rocket" | "heart" | "hooray" | "laugh" | "confused";
+
+/**
+ * Add an emoji reaction to a GitHub issue or pull request via `gh api`.
+ */
+export function reactToIssue(
+  owner: string,
+  repo: string,
+  number: number,
+  reaction: Reaction,
+): Promise<void> {
+  return ghApiReaction(`repos/${owner}/${repo}/issues/${number}/reactions`, reaction);
+}
+
+/**
+ * Add an emoji reaction to a GitHub issue comment via `gh api`.
+ */
+export function reactToIssueComment(
+  owner: string,
+  repo: string,
+  commentId: number,
+  reaction: Reaction,
+): Promise<void> {
+  return ghApiReaction(`repos/${owner}/${repo}/issues/comments/${commentId}/reactions`, reaction);
+}
+
+/**
+ * Add an emoji reaction to a GitHub PR review comment via `gh api`.
+ */
+export function reactToPRReviewComment(
+  owner: string,
+  repo: string,
+  commentId: number,
+  reaction: Reaction,
+): Promise<void> {
+  return ghApiReaction(`repos/${owner}/${repo}/pulls/comments/${commentId}/reactions`, reaction);
+}
+
+function ghApiReaction(endpoint: string, reaction: Reaction): Promise<void> {
+  return new Promise((resolve) => {
+    const _child = execFile(
+      "gh",
+      ["api", endpoint, "-f", `content=${reaction}`, "--silent"],
+      { timeout: 10_000 },
+      (err) => {
+        if (err) {
+          log.warn({ err, endpoint, reaction }, "gh reaction failed");
+          resolve(); // fire-and-forget, never reject
+        }
+        resolve();
+      },
+    );
+  });
+}
+
 /**
  * Post a comment on a GitHub issue or pull request via the `gh` CLI.
  */
